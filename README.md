@@ -1,2 +1,2 @@
-# cinema-ods
-Generating and Viewing Omnidirectional Stereo (ODS) Cinema Science Data Sets for Virtual Reality Exploration
+# Cinema ODS
+Generating and Viewing Omnidirectional Stereo (ODS) [Cinema Science](https://cinemascience.github.io/) Data Sets for Virtual Reality Exploration
