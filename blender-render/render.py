@@ -7,10 +7,18 @@ import time
 
 def main():
     # image resolution (should be 2:1 ratio)
-    dim_x = 1440
-    dim_y = 720
+    dim_x = 3840
+    dim_y = 1920
     
-    # model list
+    # render device
+    device_type = 'CUDA' # Try OptiX (requires Blender 3.0 and RTX GPU)
+    #device_type = 'OPTIX'
+    device_number = 0
+    
+    # data directories
+    data_dir = os.path.realpath(os.path.join(os.path.dirname(__file__), '..', 'data'))
+    model_dir = os.path.join(data_dir, 'obj')
+    output_dir = os.path.join(data_dir, 'output')
 
 
     # start timer
@@ -23,17 +31,16 @@ def main():
     # change render engine to 'Cycles'
     bpy.context.scene.render.engine = 'CYCLES'
     bpy.context.scene.cycles.device = 'GPU'
+    bpy.context.scene.cycles.preview_samples = 128
+    bpy.context.scene.cycles.samples = 512
     cycles_prefs = bpy.context.preferences.addons['cycles'].preferences
-    for compute_device_type in ('CUDA', 'OPENCL', 'NONE'):
-        try:
-            cycles_prefs.compute_device_type = compute_device_type
-            break
-        except TypeError:
-            pass
+    try:
+        cycles_prefs.compute_device_type = device_type
+    except TypeError:
+        print(f'APP> Error: render device type \'{device_type}\' not available')
+        exit(1)
     cycles_prefs.get_devices()
-    for device in cycles_prefs.devices:
-        device.use = True
-    print(f'APP> Cycles Render Engine using: {cycles_prefs.compute_device_type}')
+    selectRenderDevice(cycles_prefs, device_type, device_number)
 
     # add lights
     sun_data = bpy.data.lights.new('Sun', type='SUN')
@@ -82,8 +89,8 @@ def main():
     
     # import OBJ models
     models = [
-        {'filename': os.path.join('resrc', 'cell990000.obj'), 'material': mat_rbc},
-        {'filename': os.path.join('resrc', 'ctc990000.obj'), 'material': mat_ctc}
+        {'filename': os.path.join(model_dir, 'cell990000.obj'), 'material': mat_rbc},
+        {'filename': os.path.join(model_dir, 'ctc990000.obj'), 'material': mat_ctc}
     ]
     for model in models:
         bpy.ops.import_scene.obj(filepath=model['filename'], axis_forward='-Z', axis_up='Y', filter_glob="*.obj;*.mtl")
@@ -95,19 +102,52 @@ def main():
             obj.scale = (0.05, 0.05, 0.05)
             obj.location = (-12.5, 25.0, 0.0)
 
-    # render image
-    #with redirect_stdout(devnull), redirect_stderr(devnull):
-    bpy.context.scene.render.image_settings.file_format = 'PNG'
-    directory = os.path.dirname(os.path.realpath(__file__))
-    bpy.context.scene.render.filepath = os.path.join(directory, 'output.png')
+    # timer checkpoint - finished data loading/processing, about to start rendering
+    mid_time = time.time()
+
+    # render image PNG
+    #bpy.context.scene.render.image_settings.file_format = 'PNG'
+    #bpy.context.scene.render.filepath = os.path.join(output_dir, 'output.png')
+    #bpy.ops.render.render(write_still=1)
+    
+    # render image JPEG
+    bpy.context.scene.render.image_settings.quality = 92
+    bpy.context.scene.render.image_settings.file_format = 'JPEG'
+    bpy.context.scene.render.filepath = os.path.join(output_dir, 'output.jpg')
     bpy.ops.render.render(write_still=1)
     
     # end timer
     end_time = time.time()
-    elapsed_time = end_time - start_time
-    elapsed_mins = int(elapsed_time) // 60
-    elapsed_secs = elapsed_time - (60 * elapsed_mins)
-    print(f'APP> rendered {dim_x}x{dim_y} image in {elapsed_mins} minutes and {elapsed_secs:.3f} seconds')
+    total_time = secondsToMMSS(end_time - start_time)
+    load_time = secondsToMMSS(mid_time - start_time)
+    render_time = secondsToMMSS(end_time - mid_time)
 
+    print(f'APP> total time: {total_time}')
+    print(f'       model/scene load time {load_time}')
+    print(f'       render {dim_x}x{dim_y} time {render_time}')
+
+
+def selectRenderDevice(cycles_prefs, device_type, device_number):
+    device_count = 0
+    device_found = False
+    #print('Devices:')
+    for device in cycles_prefs.devices:
+        if device.type == device_type and device_count == device_number:
+            device.use = True
+            device_found = True
+        else:
+            device.use = False
+        if device.type == device_type:
+            device_count += 1
+        #print(f'  {device.name} ({device.type}) {device.use}')
+    if not device_found:
+        print(f'APP> Error: could not find {device_type} device {device_number}')
+        exit(1)
+    print(f'APP> Cycles Render Engine using: {device_type} device {device_number}')
+
+def secondsToMMSS(seconds):
+    mins = int(seconds) // 60
+    secs = seconds - (60 * mins)
+    return f'{mins:02d}:{secs:06.3f}'
 
 main()
