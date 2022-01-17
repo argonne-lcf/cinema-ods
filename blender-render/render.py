@@ -17,7 +17,7 @@ def main():
     
     # data directories
     data_dir = os.path.realpath(os.path.join(os.path.dirname(__file__), '..', 'data'))
-    model_dir = os.path.join(data_dir, 'obj')
+    model_dir = os.path.join(data_dir, 'models')
     output_dir = os.path.join(data_dir, 'output')
 
 
@@ -82,33 +82,44 @@ def main():
     # create materials
     mat_rbc = bpy.data.materials.new(name='Material_RBC')
     mat_rbc.use_nodes = True
-    mat_rbc.node_tree.nodes['Principled BSDF'].inputs['Base Color'].default_value=(0.168, 0.003, 0.003, 1.0)
+    mat_rbc_vertex_color = None
+    mat_rbc_vertex_color = mat_rbc.node_tree.nodes.new(type = 'ShaderNodeVertexColor')
+    mat_rbc_vertex_color.layer_name = 'Col'
+    mat_rbc.node_tree.links.new(mat_rbc_vertex_color.outputs[0], mat_rbc.node_tree.nodes['Principled BSDF'].inputs['Base Color'])
+    
     mat_ctc = bpy.data.materials.new(name='Material_CTC')
     mat_ctc.use_nodes = True
     mat_ctc.node_tree.nodes['Principled BSDF'].inputs['Base Color'].default_value=(0.009, 0.077, 0.007, 1.0)
+    
     #mat_path = 'C:/Users/tmarrinan/Desktop/materials.blend\\Material\\'
     #mat_name = 'TestMaterial01'
     #bpy.ops.wm.append(filename=mat_name, directory=mat_path)
     #mat_ctc = bpy.data.materials.get(mat_name)
     
     # import OBJ models
+    #models = [
+    #    {'filename': os.path.join(model_dir, 'cell990000.obj'), 'material': mat_rbc},
+    #    {'filename': os.path.join(model_dir, 'ctc990000.obj'), 'material': mat_ctc}
+    #]
+    # import PLY models
     models = [
-        {'filename': os.path.join(model_dir, 'cell990000.obj'), 'material': mat_rbc},
-        {'filename': os.path.join(model_dir, 'ctc990000.obj'), 'material': mat_ctc}
+        {'filename': os.path.join(model_dir, 'cell_force_att_1300000.ply'), 'material': mat_rbc}
     ]
     for model in models:
-        bpy.ops.import_scene.obj(filepath=model['filename'], axis_forward='-Z', axis_up='Y', filter_glob="*.obj;*.mtl")
+        bpy.ops.import_mesh.ply(filepath=model['filename'], filter_glob="*.ply")
         objs = bpy.context.selected_objects
         for obj in objs:
-            obj.data.materials[0] = model['material']
+            obj.data.materials.append(model['material'])
             for poly in obj.data.polygons:
                 poly.use_smooth = True
             obj.scale = (0.05, 0.05, 0.05)
+            obj.rotation_euler = (math.pi / 2.0, 0.0, 0.0)
             obj.location = (-12.5, 25.0, 0.0)
 
     # timer checkpoint - finished data loading/processing, about to start rendering
     mid_time = time.time()
 
+    """
     # render image PNG
     #bpy.context.scene.render.image_settings.file_format = 'PNG'
     #bpy.context.scene.render.filepath = os.path.join(output_dir, 'output.png')
@@ -129,6 +140,7 @@ def main():
     print(f'APP> total time: {total_time}')
     print(f'       model/scene load time {load_time}')
     print(f'       render {dim_x}x{dim_y} time {render_time}')
+    """
 
 
 def selectRenderDevice(cycles_prefs, device_type, device_number):
