@@ -11,8 +11,8 @@ def main():
     dim_y = 1920
     
     # render device
-    device_type = 'CUDA' # Try OptiX (requires Blender 3.0 and RTX GPU)
-    #device_type = 'OPTIX'
+    #device_type = 'CUDA' # Try OptiX (requires Blender 3.0 and best with RTX GPU)
+    device_type = 'OPTIX'
     device_number = 0
     
     # data directories
@@ -31,8 +31,8 @@ def main():
     # change render engine to 'Cycles'
     bpy.context.scene.render.engine = 'CYCLES'
     bpy.context.scene.cycles.device = 'GPU'
-    bpy.context.scene.cycles.preview_samples = 128
-    bpy.context.scene.cycles.samples = 512
+    bpy.context.scene.cycles.preview_samples = 64
+    bpy.context.scene.cycles.samples = 256
     cycles_prefs = bpy.context.preferences.addons['cycles'].preferences
     try:
         cycles_prefs.compute_device_type = device_type
@@ -86,6 +86,10 @@ def main():
     mat_ctc = bpy.data.materials.new(name='Material_CTC')
     mat_ctc.use_nodes = True
     mat_ctc.node_tree.nodes['Principled BSDF'].inputs['Base Color'].default_value=(0.009, 0.077, 0.007, 1.0)
+    #mat_path = 'C:/Users/tmarrinan/Desktop/materials.blend\\Material\\'
+    #mat_name = 'TestMaterial01'
+    #bpy.ops.wm.append(filename=mat_name, directory=mat_path)
+    #mat_ctc = bpy.data.materials.get(mat_name)
     
     # import OBJ models
     models = [
