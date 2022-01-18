@@ -11,9 +11,12 @@ def main():
     dim_y = 1920
     
     # render device
-    #device_type = 'CUDA' # Try OptiX (requires Blender 3.0 and best with RTX GPU)
-    device_type = 'OPTIX'
+    #device_type = 'CUDA'
+    device_type = 'OPTIX' # OptiX requires Blender 3.0 and best with RTX GPU
     device_number = 0
+    
+    # solid color vs. color with per-vertex property
+    color_by_vertex = True
     
     # data directories
     data_dir = os.path.realpath(os.path.join(os.path.dirname(__file__), '..', 'data'))
@@ -68,7 +71,7 @@ def main():
     cam_data.stereo.pole_merge_angle_to = math.pi / 2.0    # 90 deg
     cam = bpy.data.objects.new('Camera', cam_data)
     cam.location = (0.0, 0.0, 1.35)
-    cam.rotation_euler = (math.pi / 2.0, 0.0, 0.0)
+    cam.rotation_euler = (0.5 * math.pi, 0.0, 1.5 * math.pi)
     bpy.context.collection.objects.link(cam)
     bpy.context.scene.camera = cam
     
@@ -81,15 +84,21 @@ def main():
     
     # create materials
     mat_rbc = bpy.data.materials.new(name='Material_RBC')
-    mat_rbc.use_nodes = True
-    mat_rbc_vertex_color = None
-    mat_rbc_vertex_color = mat_rbc.node_tree.nodes.new(type = 'ShaderNodeVertexColor')
-    mat_rbc_vertex_color.layer_name = 'Col'
-    mat_rbc.node_tree.links.new(mat_rbc_vertex_color.outputs[0], mat_rbc.node_tree.nodes['Principled BSDF'].inputs['Base Color'])
-    
     mat_ctc = bpy.data.materials.new(name='Material_CTC')
+    mat_rbc.use_nodes = True
     mat_ctc.use_nodes = True
-    mat_ctc.node_tree.nodes['Principled BSDF'].inputs['Base Color'].default_value=(0.009, 0.077, 0.007, 1.0)
+    if color_by_vertex:
+        mat_rbc_vertex_color = mat_rbc.node_tree.nodes.new(type = 'ShaderNodeVertexColor')
+        mat_rbc_vertex_color.layer_name = 'Col'
+        mat_rbc.node_tree.links.new(mat_rbc_vertex_color.outputs[0], mat_rbc.node_tree.nodes['Principled BSDF'].inputs['Base Color'])
+        mat_ctc_vertex_color = mat_ctc.node_tree.nodes.new(type = 'ShaderNodeVertexColor')
+        mat_ctc_vertex_color.layer_name = 'Col'
+        mat_ctc.node_tree.links.new(mat_rbc_vertex_color.outputs[0], mat_ctc.node_tree.nodes['Principled BSDF'].inputs['Base Color'])
+    else:
+        mat_rbc.node_tree.nodes['Principled BSDF'].inputs['Base Color'].default_value = (0.168, 0.003, 0.003, 1.0)
+        mat_ctc.node_tree.nodes['Principled BSDF'].inputs['Base Color'].default_value = (0.009, 0.077, 0.007, 1.0)
+    mat_rbc.node_tree.nodes['Principled BSDF'].inputs['Specular'].default_value = 0.0
+    mat_ctc.node_tree.nodes['Principled BSDF'].inputs['Specular'].default_value = 0.0
     
     #mat_path = 'C:/Users/tmarrinan/Desktop/materials.blend\\Material\\'
     #mat_name = 'TestMaterial01'
@@ -103,7 +112,8 @@ def main():
     #]
     # import PLY models
     models = [
-        {'filename': os.path.join(model_dir, 'cell_force_att_1300000.ply'), 'material': mat_rbc}
+        {'filename': os.path.join(model_dir, 'cell_force_att_1300000.ply'), 'material': mat_rbc},
+        {'filename': os.path.join(model_dir, 'ctc_force_att_1300000.ply'), 'material': mat_ctc}
     ]
     for model in models:
         bpy.ops.import_mesh.ply(filepath=model['filename'], filter_glob="*.ply")
@@ -113,8 +123,8 @@ def main():
             for poly in obj.data.polygons:
                 poly.use_smooth = True
             obj.scale = (0.05, 0.05, 0.05)
-            obj.rotation_euler = (math.pi / 2.0, 0.0, 0.0)
-            obj.location = (-12.5, 25.0, 0.0)
+            obj.rotation_euler = (1.5 * math.pi, 0.0, 0.5 * math.pi)
+            obj.location = (25, -12.5, 2.5)
 
     # timer checkpoint - finished data loading/processing, about to start rendering
     mid_time = time.time()
