@@ -10,6 +10,7 @@
 #include <vtkPointData.h>
 #include <vtkPolyData.h>
 #include <vtkSmartPointer.h>
+#include <vtkTriangleFilter.h>
 #include <vtkXMLPolyDataReader.h>
 
 typedef struct PlyOptions {
@@ -68,10 +69,10 @@ int main(int argc, char **argv)
     ctc_options.write_colormap_ppm = true;
     ctc_options.colormap_filename = ctc_colormapname;
     // color map start: HCL(275.0, 57.0, 27.0) --> RGB(70, 50, 127)  [dark purple)
-    // color map start: HCL(221.0, 41.6, 37.3) --> RGB(44, 98, 120)  [dark teal)
-    ctc_options.colormap_hcl_start[0] = 221.0;
-    ctc_options.colormap_hcl_start[1] = 41.6;
-    ctc_options.colormap_hcl_start[2] = 37.3;
+    // color map start: HCL(177.0, 26.4, 22.2) --> RGB(16, 66, 58)  [dark teal)
+    ctc_options.colormap_hcl_start[0] = 177.0;
+    ctc_options.colormap_hcl_start[1] = 26.4;
+    ctc_options.colormap_hcl_start[2] = 22.2;
     // color map end: HCL(103.8, 109.0, 89.1) --> RGB(205, 242, 36)  [yellow-green]
     // color map end: HCL(116.7, 116.7, 84.1) --> RGB(167, 235, 30)  [yellow-green]
     ctc_options.colormap_hcl_end[0] = 116.7;
@@ -79,6 +80,31 @@ int main(int argc, char **argv)
     ctc_options.colormap_hcl_end[2] = 84.1;
     
     convertVtpToPly(ctc_vtpname, ctc_plyname, ctc_options);
+    
+    
+    // Fluid Streamlines
+    std::string streamline_vtpname = "../data/vtk/streamline_mag_1300000.vtp";
+    std::string streamline_plyname = "../data/models/streamline_mag_1300000.ply";
+    std::string streamline_colormapname = "../data/streamline_colormap.ppm";
+    
+    PlyOptions streamline_options;
+    streamline_options.color_array_name = "velMag";
+    streamline_options.color_array_min = 0.0;
+    streamline_options.color_array_max = 0.025;
+    streamline_options.write_texcoords = false;
+    streamline_options.write_colormap_ppm = true;
+    streamline_options.colormap_filename = streamline_colormapname;
+    // color map start: HCL(295.3, 61.0, 28.2) --> RGB(94, 32, 125)  [dark purple)
+    streamline_options.colormap_hcl_start[0] = 295.3;
+    streamline_options.colormap_hcl_start[1] = 61.0;
+    streamline_options.colormap_hcl_start[2] = 28.2;
+    // color map end: HCL(239.8, 84.8, 55.6) --> RGB(60, 142, 212)  [light blue]
+    streamline_options.colormap_hcl_end[0] = 239.8;
+    streamline_options.colormap_hcl_end[1] = 84.8;
+    streamline_options.colormap_hcl_end[2] = 55.6;
+    
+    convertVtpToPly(streamline_vtpname, streamline_plyname, streamline_options);
+    
     
     
     return EXIT_SUCCESS;
@@ -96,10 +122,22 @@ void convertVtpToPly(std::string vtp_filename, std::string ply_filename, PlyOpti
     vtkSmartPointer<vtkPolyData> polydata = reader->GetOutput();
     
     std::cout << "vtkPolyData: " << polydata->GetNumberOfPoints() << " points, ";
+    std::cout << polydata->GetNumberOfPolys() << " polygons, ";
+    std::cout << polydata->GetNumberOfCells() << " cells, ";
     std::cout << polydata->GetPointData()->GetNumberOfArrays() << " arrays" << std::endl;
-    for (i = 0; i < polydata->GetPointData()->GetNumberOfArrays(); i++) {
+    for (i = 0; i < polydata->GetPointData()->GetNumberOfArrays(); i++)
+    {
         vtkSmartPointer<vtkAbstractArray> array = polydata->GetPointData()->GetAbstractArray(i);
         std::cout << "  " << array->GetName() << " (" << array->GetNumberOfComponents() << " components)" << std::endl;
+    }
+    
+    // Triangulate if polygon data doesn't exist
+    if (polydata->GetNumberOfPolys() == 0)
+    {
+        vtkNew<vtkTriangleFilter> triangulate;
+        triangulate->SetInputData(polydata);
+        triangulate->Update();
+        polydata = triangulate->GetOutput();
     }
     
     // Copy specified vector attribute to texture coordinate array
