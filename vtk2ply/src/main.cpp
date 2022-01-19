@@ -42,11 +42,11 @@ int main(int argc, char **argv)
     rbc_options.texcoord_array_name = "RandomPointVectors";
     rbc_options.write_colormap_ppm = true;
     rbc_options.colormap_filename = rbc_colormapname;
-    // color map start: HCL(5.2, 64.5, 22.0) --> RGB(95, 8, 37)
+    // color map start: HCL(5.2, 64.5, 22.0) --> RGB(95, 8, 37)  [dark red-purple]
     rbc_options.colormap_hcl_start[0] = 5.2;
     rbc_options.colormap_hcl_start[1] = 64.5;
     rbc_options.colormap_hcl_start[2] = 22.0;
-    // color map end: HCL(62.9, 97.2, 80.9) --> RGB(232, 193, 32)
+    // color map end: HCL(62.9, 97.2, 80.9) --> RGB(232, 193, 32)  [yellow-gold]
     rbc_options.colormap_hcl_end[0] = 62.9;
     rbc_options.colormap_hcl_end[1] = 97.2;
     rbc_options.colormap_hcl_end[2] = 80.9;
@@ -67,14 +67,16 @@ int main(int argc, char **argv)
     ctc_options.texcoord_array_name = "RandomPointVectors";
     ctc_options.write_colormap_ppm = true;
     ctc_options.colormap_filename = ctc_colormapname;
-    // color map start: HCL(275.0, 57.0, 27.0) --> RGB(70, 50, 127)
-    ctc_options.colormap_hcl_start[0] = 275.0;
-    ctc_options.colormap_hcl_start[1] = 57.0;
-    ctc_options.colormap_hcl_start[2] = 27.0;
-    // color map end: HCL(103.8, 109.0, 89.1) --> RGB(205, 242, 36)
-    ctc_options.colormap_hcl_end[0] = 103.8;
-    ctc_options.colormap_hcl_end[1] = 109.0;
-    ctc_options.colormap_hcl_end[2] = 89.1;
+    // color map start: HCL(275.0, 57.0, 27.0) --> RGB(70, 50, 127)  [dark purple)
+    // color map start: HCL(221.0, 41.6, 37.3) --> RGB(44, 98, 120)  [dark teal)
+    ctc_options.colormap_hcl_start[0] = 221.0;
+    ctc_options.colormap_hcl_start[1] = 41.6;
+    ctc_options.colormap_hcl_start[2] = 37.3;
+    // color map end: HCL(103.8, 109.0, 89.1) --> RGB(205, 242, 36)  [yellow-green]
+    // color map end: HCL(116.7, 116.7, 84.1) --> RGB(167, 235, 30)  [yellow-green]
+    ctc_options.colormap_hcl_end[0] = 116.7;
+    ctc_options.colormap_hcl_end[1] = 116.7;
+    ctc_options.colormap_hcl_end[2] = 84.1;
     
     convertVtpToPly(ctc_vtpname, ctc_plyname, ctc_options);
     

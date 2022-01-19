@@ -93,7 +93,7 @@ def main():
         mat_rbc.node_tree.links.new(mat_rbc_vertex_color.outputs[0], mat_rbc.node_tree.nodes['Principled BSDF'].inputs['Base Color'])
         mat_ctc_vertex_color = mat_ctc.node_tree.nodes.new(type = 'ShaderNodeVertexColor')
         mat_ctc_vertex_color.layer_name = 'Col'
-        mat_ctc.node_tree.links.new(mat_rbc_vertex_color.outputs[0], mat_ctc.node_tree.nodes['Principled BSDF'].inputs['Base Color'])
+        mat_ctc.node_tree.links.new(mat_ctc_vertex_color.outputs[0], mat_ctc.node_tree.nodes['Principled BSDF'].inputs['Base Color'])
     else:
         mat_rbc.node_tree.nodes['Principled BSDF'].inputs['Base Color'].default_value = (0.168, 0.003, 0.003, 1.0)
         mat_ctc.node_tree.nodes['Principled BSDF'].inputs['Base Color'].default_value = (0.009, 0.077, 0.007, 1.0)
@@ -105,11 +105,6 @@ def main():
     #bpy.ops.wm.append(filename=mat_name, directory=mat_path)
     #mat_ctc = bpy.data.materials.get(mat_name)
     
-    # import OBJ models
-    #models = [
-    #    {'filename': os.path.join(model_dir, 'cell990000.obj'), 'material': mat_rbc},
-    #    {'filename': os.path.join(model_dir, 'ctc990000.obj'), 'material': mat_ctc}
-    #]
     # import PLY models
     models = [
         {'filename': os.path.join(model_dir, 'cell_force_att_1300000.ply'), 'material': mat_rbc},
