@@ -7,7 +7,7 @@ from PIL import Image
 
 def main():
     parser = argparse.ArgumentParser(description='Python VTK script for processing blood flow simulation data and outputting PLY models')
-    parser.add_argument('-i', '--vtk-dir', type=str, default='.', help='directory where input/output VTK files exist')
+    parser.add_argument('-t', '--tex-dir', type=str, default='.', help='directory where input texture coordinate CSV files exist')
     parser.add_argument('-o', '--ply-dir', type=str, default='.', help='directory where output PLY files will be saved')
     parser.add_argument('-r', '--rbc-filename', type=str, default='rbc.vtk', help='name of red blood cell input VTK file')
     parser.add_argument('-c', '--ctc-filename', type=str, default='ctc.vtk', help='name of circulating tumor cell input VTK file')
@@ -19,10 +19,8 @@ def main():
     args = parser.parse_args(sys.argv[1:])
     
     # Read in red blood cell and circulating tumor cell data
-    rbc_vtkname = os.path.join(args.vtk_dir, args.rbc_filename)
-    rbc_polydata = readVtkFileAsPolyData(rbc_vtkname)
-    ctc_vtkname = os.path.join(args.vtk_dir, args.ctc_filename)
-    ctc_polydata = readVtkFileAsPolyData(ctc_vtkname)
+    rbc_polydata = readVtkFileAsPolyData(args.rbc_filename)
+    ctc_polydata = readVtkFileAsPolyData(args.ctc_filename)
     
     """
     # Generate 3D "texture coordinates" based on a single objects normalized location
@@ -32,14 +30,14 @@ def main():
     
     # Add 3D texcoords -- TODO: cmd line arg for these files?
     rbc_texcoords3d = [
-        readCsvTexCoordsAsUint8(os.path.join(args.vtk_dir, 'rbc_tex_0.csv')),
-        readCsvTexCoordsAsUint8(os.path.join(args.vtk_dir, 'rbc_tex_1.csv')),
-        readCsvTexCoordsAsUint8(os.path.join(args.vtk_dir, 'rbc_tex_2.csv')),
+        readCsvTexCoordsAsUint8(os.path.join(args.tex_dir, 'rbc_tex_0.csv')),
+        readCsvTexCoordsAsUint8(os.path.join(args.tex_dir, 'rbc_tex_1.csv')),
+        readCsvTexCoordsAsUint8(os.path.join(args.tex_dir, 'rbc_tex_2.csv')),
     ]
     ctc_texcoords3d = [
-        readCsvTexCoordsAsUint8(os.path.join(args.vtk_dir, 'ctc_tex_0.csv')),
-        readCsvTexCoordsAsUint8(os.path.join(args.vtk_dir, 'ctc_tex_1.csv')),
-        readCsvTexCoordsAsUint8(os.path.join(args.vtk_dir, 'ctc_tex_2.csv')),
+        readCsvTexCoordsAsUint8(os.path.join(args.tex_dir, 'ctc_tex_0.csv')),
+        readCsvTexCoordsAsUint8(os.path.join(args.tex_dir, 'ctc_tex_1.csv')),
+        readCsvTexCoordsAsUint8(os.path.join(args.tex_dir, 'ctc_tex_2.csv')),
     ]
     add3DTexCoordsToPolyData(rbc_polydata, args.num_verts_rbc, rbc_texcoords3d)
     add3DTexCoordsToPolyData(ctc_polydata, args.num_verts_ctc, ctc_texcoords3d)
@@ -55,14 +53,12 @@ def main():
     ctc_polydata_w_norms.ComputeCellNormalsOff()
     
     # Read in fluid flow image data
-    fluid_vtiname = os.path.join(args.vtk_dir, args.fluid_filename)
-    fluid = readVtiFile(fluid_vtiname)
+    fluid = readVtiFile(args.fluid_filename)
     print('Fluid VTI arrays:')
     for i in range(fluid.GetPointData().GetNumberOfArrays()):
         array = fluid.GetPointData().GetAbstractArray(i)
         print(f'  {array.GetName()} ({array.GetNumberOfComponents()} components)')
     fluid.GetPointData().SetActiveVectors('velocity')
-    print(fluid.GetBounds())
     
     # Generate streamlines
     seeds = vtk.vtkLineSource()
@@ -91,7 +87,7 @@ def main():
     fluid_streamtubes = vtk.vtkTubeFilter()
     fluid_streamtubes.SetInputConnection(fluid_streamlines_velocity_mag.GetOutputPort())
     fluid_streamtubes.SetNumberOfSides(16)
-    fluid_streamtubes.SetRadius(2.0)
+    fluid_streamtubes.SetRadius(1.0)
     fluid_streamtubes.CappingOff()
     fluid_streamtubes.Update()
     
@@ -191,7 +187,7 @@ def main():
     ctc_polydata_w_force_mag.Update()
 
     # Write Cells and Streamlines to PLY model file
-    rbc_plyname = os.path.join(args.ply_dir, os.path.splitext(args.rbc_filename)[0] + '.ply')
+    rbc_plyname = os.path.join(args.ply_dir, os.path.splitext(os.path.basename(args.rbc_filename))[0] + '.ply')
     rbc_colormapname = os.path.join(args.ply_dir, 'rbc_colormap.png')
     rbc_options = {
         'color_array_name': 'forceMag',
@@ -206,7 +202,7 @@ def main():
     }
     writeVtkPolyDataToPly(rbc_polydata_w_force_mag.GetOutput(), rbc_plyname, rbc_options)
     
-    ctc_plyname = os.path.join(args.ply_dir, os.path.splitext(args.ctc_filename)[0] + '.ply')
+    ctc_plyname = os.path.join(args.ply_dir, os.path.splitext(os.path.basename(args.ctc_filename))[0] + '.ply')
     ctc_colormapname = os.path.join(args.ply_dir, 'ctc_colormap.png')
     ctc_options = {
         'color_array_name': 'forceMag',
@@ -221,7 +217,7 @@ def main():
     }
     writeVtkPolyDataToPly(ctc_polydata_w_force_mag.GetOutput(), ctc_plyname, ctc_options)
     
-    streamline_plyname = os.path.join(args.ply_dir, f'streamline_{os.path.splitext(args.fluid_filename)[0]}_{args.num_streamlines}.ply')
+    streamline_plyname = os.path.join(args.ply_dir, f'streamline_{os.path.splitext(os.path.basename(args.fluid_filename))[0]}_{args.num_streamlines}.ply')
     streamline_colormapname = os.path.join(args.ply_dir, 'streamline_colormap.png')
     streamline_options = {
         'color_array_name': 'velocityMag',
@@ -231,7 +227,7 @@ def main():
         'write_colormap_png': True,
         'colormap_filename': streamline_colormapname,
         'colormap_hcl_start': [295.3, 61.0, 28.2], # HCL(295.3, 61.0, 28.2) --> RGB(94, 32, 125)  [dark purple]
-        'colormap_hcl_end': [239.8, 84.8, 55.6] #HCL(239.8, 84.8, 55.6) --> RGB(60, 142, 212)  [light blue]
+        'colormap_hcl_end': [239.8, 84.8, 55.6] # HCL(239.8, 84.8, 55.6) --> RGB(60, 142, 212)  [light blue]
     }
     writeVtkPolyDataToPly(fluid_streamtubes.GetOutput(), streamline_plyname, streamline_options)
 
@@ -363,6 +359,7 @@ def writeVtpFile(polydata, vtpname):
 
 
 def writeVtkPolyDataToPly(polydata, ply_filename, options):
+    """
     # Print vtk polygon data contents
     print(f'vtkPolyData: {polydata.GetNumberOfPoints()} points, ', end='')
     print(f'{polydata.GetNumberOfPolys()} polygons, ', end='')
@@ -371,6 +368,7 @@ def writeVtkPolyDataToPly(polydata, ply_filename, options):
     for i in range(polydata.GetPointData().GetNumberOfArrays()):
         array = polydata.GetPointData().GetAbstractArray(i)
         print(f'  {array.GetName()} ({array.GetNumberOfComponents()} components)')
+    """
     
     # Triangulate if polygon data doesn't exist
     if polydata.GetNumberOfPolys() == 0:
