@@ -83,6 +83,7 @@ def main():
     bpy.context.scene.render.image_settings.stereo_3d_format.display_mode = 'TOPBOTTOM'
     
     # create materials
+    
     mat_rbc = bpy.data.materials.new(name='Material_RBC')
     mat_ctc = bpy.data.materials.new(name='Material_CTC')
     mat_streamline = bpy.data.materials.new(name='Material_Streamline')
@@ -105,12 +106,23 @@ def main():
         mat_streamline.node_tree.nodes['Principled BSDF'].inputs['Base Color'].default_value = (0.314, 0.357, 0.671, 1.0)
     mat_rbc.node_tree.nodes['Principled BSDF'].inputs['Specular'].default_value = 0.0
     mat_ctc.node_tree.nodes['Principled BSDF'].inputs['Specular'].default_value = 0.0
-    mat_streamline.node_tree.nodes['Principled BSDF'].inputs['Specular'].default_value = 0.0
+    mat_streamline.node_tree.nodes['Principled BSDF'].inputs['Specular'].default_value = 0.25
     
-    #mat_path = 'C:/Users/tmarrinan/Desktop/materials.blend\\Material\\'
-    #mat_name = 'TestMaterial01'
-    #bpy.ops.wm.append(filename=mat_name, directory=mat_path)
-    #mat_ctc = bpy.data.materials.get(mat_name)
+    """
+    mat_path = os.path.join(model_dir, 'materials.blend') + '\\Material\\'
+    mat_rbc_name = 'RBC Cell Force Material'
+    mat_ctc_name = 'CTC Cell Force Material'
+    bpy.ops.wm.append(filename=mat_rbc_name, directory=mat_path)
+    bpy.ops.wm.append(filename=mat_ctc_name, directory=mat_path)
+    mat_rbc = bpy.data.materials.get(mat_rbc_name)
+    mat_ctc = bpy.data.materials.get(mat_rbc_name)
+    mat_streamline = bpy.data.materials.new(name='Streamline Material')
+    mat_streamline.use_nodes = True
+    mat_streamline_vertex_color = mat_streamline.node_tree.nodes.new(type = 'ShaderNodeVertexColor')
+    mat_streamline_vertex_color.layer_name = 'Col'
+    mat_streamline.node_tree.links.new(mat_streamline_vertex_color.outputs[0], mat_streamline.node_tree.nodes['Principled BSDF'].inputs['Base Color'])
+    mat_streamline.node_tree.nodes['Principled BSDF'].inputs['Specular'].default_value = 0.25
+    """
     
     # import PLY models
     models = [
