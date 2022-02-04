@@ -167,8 +167,8 @@ def main():
     
     # import PLY models
     models = [
-        #{'filename': os.path.join(model_dir, args.rbc_plyfile), 'material': mat_rbc},
-        #{'filename': os.path.join(model_dir, args.ctc_plyfile), 'material': mat_ctc},
+        {'filename': os.path.join(model_dir, args.rbc_plyfile), 'material': mat_rbc},
+        {'filename': os.path.join(model_dir, args.ctc_plyfile), 'material': mat_ctc},
         {'filename': os.path.join(model_dir, args.streamline_plyfile), 'material': mat_streamline},
         {'filename': os.path.join(model_dir, 'micropost.ply'), 'material': mat_micropost}
     ]
@@ -195,7 +195,7 @@ def main():
     #bpy.context.scene.render.image_settings.file_format = 'PNG'
     #bpy.context.scene.render.filepath = os.path.join(output_dir, 'output.png')
     #bpy.ops.render.render(write_still=1)
-    """
+    
     # render image JPEG
     bpy.context.scene.render.image_settings.quality = 92
     bpy.context.scene.render.image_settings.file_format = 'JPEG'
@@ -211,7 +211,6 @@ def main():
     print(f'APP> total time: {total_time}')
     print(f'       model/scene load time {load_time}')
     print(f'       render {dim_x}x{dim_y} time {render_time}')
-    """
     
 
 
