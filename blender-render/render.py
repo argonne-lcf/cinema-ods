@@ -17,7 +17,8 @@ def main():
     parser.add_argument('-d', '--device', type=str, default='CPU', help='redner device (CPU, CUDA, OPTIX, OPENCL)')
     parser.add_argument('-i', '--device-id', type=int, default=0, help='device id')
     parser.add_argument('-cp', '--camera-position', type=str, default='0.0,0.0,1.65', help='camera position (x,y,z)')
-    parser.add_argument('-cd', '--camera-direction', type=str, default='90,0,270', help='camera direction in degrees (x,y,z)')
+    parser.add_argument('-cd', '--camera-direction', type=str, default='90,0,90', help='camera direction in degrees (x,y,z)')
+    parser.add_argument('-t', '--transparent-rbc', action='store_true', default=False, help='make red blood cells semi-transparent')
     parser.add_argument('-o', '--output', type=str, default='output.jpg', help='filename to save rendered output')
 
     args = parser.parse_args(sys.argv[sys.argv.index("--") + 1:])
@@ -51,8 +52,8 @@ def main():
     if len(cam_direction) == 3:
         cam_direction = (math.radians(float(cam_direction[0])), math.radians(float(cam_direction[1])), math.radians(float(cam_direction[2])))
     else:
-        print(f'APP> Warning: camera direction {args.camera_direction} does not contain x,y,z coordinates, using 90,0,270 instead')
-        cam_direction = (0.5 * math.pi, 0.0, 1.5 * math.pi)
+        print(f'APP> Warning: camera direction {args.camera_direction} does not contain x,y,z coordinates, using 90,0,90 instead')
+        cam_direction = (0.5 * math.pi, 0.0, 0.5 * math.pi)
     light_position = (cam_position[0], cam_position[1], cam_position[2] + 0.15)
 
     # start timer
@@ -97,10 +98,11 @@ def main():
     cam_data.clip_end = 200.0
     cam_data.cycles.panorama_type = 'EQUIRECTANGULAR'
     cam_data.stereo.convergence_mode = 'OFFAXIS'
+    cam_data.stereo.interocular_distance = 0.065
     cam_data.stereo.use_spherical_stereo = True
     cam_data.stereo.use_pole_merge = True
-    cam_data.stereo.pole_merge_angle_from = math.pi / 3.0  # 60 deg
-    cam_data.stereo.pole_merge_angle_to = math.pi / 2.0    # 90 deg
+    cam_data.stereo.pole_merge_angle_from = math.radians(56.25)
+    cam_data.stereo.pole_merge_angle_to = math.radians(78.75)
     cam = bpy.data.objects.new('Camera', cam_data)
     cam.location = cam_position
     cam.rotation_euler = cam_direction
@@ -153,6 +155,8 @@ def main():
     # load materials from external file
     mat_path = os.path.join(model_dir, 'materials.blend') + '\\Material\\'
     mat_rbc_name = 'RBC_Material'
+    if args.transparent_rbc:
+        mat_rbc_name = 'RBC_Material_Transparent'
     mat_ctc_name = 'CTC_Material_Alt'
     mat_streamline_name = 'Streamline_Material'
     mat_micropost_name = 'Micropost_Material'
@@ -180,7 +184,7 @@ def main():
             for poly in obj.data.polygons:
                 poly.use_smooth = True
             obj.scale = (0.05, 0.05, 0.05)
-            obj.rotation_euler = (1.5 * math.pi, 0.0, 0.5 * math.pi)
+            obj.rotation_euler = (math.radians(270.0), 0.0, math.radians(90.0))
             obj.location = (25, -12.5, 2.5)
     bpy.ops.mesh.primitive_plane_add(location=(0.0, 0.5, -1.25), rotation=(0.0, 0.0, 0.0))
     plane = bpy.context.selected_objects
