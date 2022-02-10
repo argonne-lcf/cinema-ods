@@ -12,13 +12,13 @@ def main():
     parser.add_argument('-m', '--model-dir', type=str, default='.', help='directory where PLY models and materials are stored')
     parser.add_argument('-r', '--rbc-plyfile', type=str, default='rbc.ply', help='name of red blood cell input PLY file')
     parser.add_argument('-c', '--ctc-plyfile', type=str, default='ctc.ply', help='name of circulating tumor cell input PLY file')
-    parser.add_argument('-s', '--streamline-plyfile', type=str, default='streamline.ply', help='name of fluid flow streamlines input PLY file')
+    parser.add_argument('-s', '--streamline-plyfile', type=str, default='', help='name of fluid flow streamlines input PLY file (blank to omit)')
     parser.add_argument('-w', '--resolution', type=int, default=3840, help='horizontal resolution to render image (will always have 2:1 aspect ratio)')
     parser.add_argument('-d', '--device', type=str, default='CPU', help='redner device (CPU, CUDA, OPTIX, OPENCL)')
     parser.add_argument('-i', '--device-id', type=int, default=0, help='device id')
     parser.add_argument('-cp', '--camera-position', type=str, default='0.0,0.0,1.65', help='camera position (x,y,z)')
     parser.add_argument('-cd', '--camera-direction', type=str, default='90,0,90', help='camera direction in degrees (x,y,z)')
-    parser.add_argument('-t', '--transparent-rbc', action='store_true', default=False, help='make red blood cells semi-transparent')
+    parser.add_argument('-rs', '--render-styles',type=str, default='solid', help='list of render styles (solid,force,solid-transparent,force-transparent) or all')
     parser.add_argument('-o', '--output', type=str, default='output.jpg', help='filename to save rendered output')
 
     args = parser.parse_args(sys.argv[sys.argv.index("--") + 1:])
@@ -125,62 +125,43 @@ def main():
     link_2 = tree.links.new(alpha_over.outputs[0], tree.nodes[0].inputs[0])
     alpha_over.inputs[1].default_value = (0.015, 0.015, 0.015, 1.0)
     
-    """
-    # create materials
-    mat_rbc = bpy.data.materials.new(name='Material_RBC')
-    mat_ctc = bpy.data.materials.new(name='Material_CTC')
-    mat_streamline = bpy.data.materials.new(name='Material_Streamline')
-    mat_rbc.use_nodes = True
-    mat_ctc.use_nodes = True
-    mat_streamline.use_nodes = True
-    if color_by_vertex:
-        mat_rbc_vertex_color = mat_rbc.node_tree.nodes.new(type = 'ShaderNodeVertexColor')
-        mat_rbc_vertex_color.layer_name = 'Col'
-        mat_rbc.node_tree.links.new(mat_rbc_vertex_color.outputs[0], mat_rbc.node_tree.nodes['Principled BSDF'].inputs['Base Color'])
-        mat_ctc_vertex_color = mat_ctc.node_tree.nodes.new(type = 'ShaderNodeVertexColor')
-        mat_ctc_vertex_color.layer_name = 'Col'
-        mat_ctc.node_tree.links.new(mat_ctc_vertex_color.outputs[0], mat_ctc.node_tree.nodes['Principled BSDF'].inputs['Base Color'])
-        mat_streamline_vertex_color = mat_streamline.node_tree.nodes.new(type = 'ShaderNodeVertexColor')
-        mat_streamline_vertex_color.layer_name = 'Col'
-        mat_streamline.node_tree.links.new(mat_streamline_vertex_color.outputs[0], mat_streamline.node_tree.nodes['Principled BSDF'].inputs['Base Color'])
-    else:
-        mat_rbc.node_tree.nodes['Principled BSDF'].inputs['Base Color'].default_value = (0.168, 0.003, 0.003, 1.0)
-        mat_ctc.node_tree.nodes['Principled BSDF'].inputs['Base Color'].default_value = (0.009, 0.077, 0.007, 1.0)
-        mat_streamline.node_tree.nodes['Principled BSDF'].inputs['Base Color'].default_value = (0.314, 0.357, 0.671, 1.0)
-    mat_rbc.node_tree.nodes['Principled BSDF'].inputs['Specular'].default_value = 0.0
-    mat_ctc.node_tree.nodes['Principled BSDF'].inputs['Specular'].default_value = 0.0
-    mat_streamline.node_tree.nodes['Principled BSDF'].inputs['Specular'].default_value = 0.25
-    """
-    
     # load materials from external file
     mat_path = os.path.join(model_dir, 'materials.blend') + '\\Material\\'
-    mat_rbc_name = 'RBC_Material'
-    if args.transparent_rbc:
-        mat_rbc_name = 'RBC_Material_Transparent'
-    mat_ctc_name = 'CTC_Material_Alt'
+    mat_rbc_solid_name = 'RBC_Material_Solid'
+    mat_rbc_solid_trans_name = 'RBC_Material_Solid_Transparent'
+    mat_rbc_force_name = 'RBC_Material'
+    mat_rbc_force_trans_name = 'RBC_Material_Transparent'
+    mat_ctc_solid_name = 'CTC_Material_Solid'
+    mat_ctc_force_name = 'CTC_Material'
     mat_streamline_name = 'Streamline_Material'
     mat_micropost_name = 'Micropost_Material'
-    bpy.ops.wm.append(filename=mat_rbc_name, directory=mat_path)
-    bpy.ops.wm.append(filename=mat_ctc_name, directory=mat_path)
+    bpy.ops.wm.append(filename=mat_rbc_solid_name, directory=mat_path)
+    bpy.ops.wm.append(filename=mat_rbc_solid_trans_name, directory=mat_path)
+    bpy.ops.wm.append(filename=mat_rbc_force_name, directory=mat_path)
+    bpy.ops.wm.append(filename=mat_rbc_force_trans_name, directory=mat_path)
+    bpy.ops.wm.append(filename=mat_ctc_solid_name, directory=mat_path)
+    bpy.ops.wm.append(filename=mat_ctc_force_name, directory=mat_path)
     bpy.ops.wm.append(filename=mat_streamline_name, directory=mat_path)
     bpy.ops.wm.append(filename=mat_micropost_name, directory=mat_path)
-    mat_rbc = bpy.data.materials.get(mat_rbc_name)
-    mat_ctc = bpy.data.materials.get(mat_ctc_name)
     mat_streamline = bpy.data.materials.get(mat_streamline_name)
-    mat_micropost = bpy.data.materials.get(mat_micropost_name)
+    mat_micropost = bpy.data.materials.get(mat_micropost_name) 
     
     # import PLY models
-    models = [
-        {'filename': os.path.join(model_dir, args.rbc_plyfile), 'material': mat_rbc},
-        {'filename': os.path.join(model_dir, args.ctc_plyfile), 'material': mat_ctc},
-        {'filename': os.path.join(model_dir, args.streamline_plyfile), 'material': mat_streamline},
-        {'filename': os.path.join(model_dir, 'micropost.ply'), 'material': mat_micropost}
-    ]
+    models = []
+    models.append({'type': 'rbc', 'filename': os.path.join(model_dir, args.rbc_plyfile)})
+    models.append({'type': 'ctc', 'filename': os.path.join(model_dir, args.ctc_plyfile)})
+    if args.streamline_plyfile != '':
+        models.append({'type': 'streamlines', 'filename': os.path.join(model_dir, args.streamline_plyfile)})
+    models.append({'type': 'micropost', 'filename': os.path.join(model_dir, 'micropost.ply')})
     for model in models:
         bpy.ops.import_mesh.ply(filepath=model['filename'], filter_glob="*.ply")
         objs = bpy.context.selected_objects
+        model['objs'] = objs
         for obj in objs:
-            obj.data.materials.append(model['material'])
+            if model['type'] == 'streamlines':
+                obj.data.materials.append(mat_streamline)
+            elif model['type'] == 'micropost':
+                obj.data.materials.append(mat_micropost)
             for poly in obj.data.polygons:
                 poly.use_smooth = True
             obj.scale = (0.05, 0.05, 0.05)
@@ -191,31 +172,72 @@ def main():
     for obj in plane:
         obj.scale = (25.5, 13.5, 1.0)
         obj.data.materials.append(mat_micropost)
-
+        
     # timer checkpoint - finished data loading/processing, about to start rendering
     mid_time = time.time()
-
-    # render image PNG
-    #bpy.context.scene.render.image_settings.file_format = 'PNG'
-    #bpy.context.scene.render.filepath = os.path.join(output_dir, 'output.png')
-    #bpy.ops.render.render(write_still=1)
     
-    # render image JPEG
-    bpy.context.scene.render.image_settings.quality = 92
-    bpy.context.scene.render.image_settings.file_format = 'JPEG'
-    bpy.context.scene.render.filepath = os.path.realpath(args.output)
-    bpy.ops.render.render(write_still=1)
+    # render styles
+    render_styles = ['solid', 'force', 'solid-transparent', 'force-transparent']
+    if args.render_styles != 'all':
+        render_styles = args.render_styles.split(',')
+    
+    render_times = []
+    for style in render_styles:
+        # update materials
+        mat_rbc = None
+        mat_ctc = None
+        if style == 'force':
+            mat_rbc = bpy.data.materials.get(mat_rbc_force_name)
+            mat_ctc = bpy.data.materials.get(mat_ctc_force_name)
+        elif style == 'solid-transparent':
+            mat_rbc = bpy.data.materials.get(mat_rbc_solid_trans_name)
+            mat_ctc = bpy.data.materials.get(mat_ctc_solid_name)
+        elif style == 'force-transparent':
+            mat_rbc = bpy.data.materials.get(mat_rbc_force_trans_name)
+            mat_ctc = bpy.data.materials.get(mat_ctc_force_name)
+        else: # solid
+            mat_rbc = bpy.data.materials.get(mat_rbc_solid_name)
+            mat_ctc = bpy.data.materials.get(mat_ctc_solid_name)
+        for model in models:
+            mat = None
+            if model['type'] == 'rbc':
+                mat = mat_rbc
+            elif model['type'] == 'ctc':
+                mat = mat_ctc
+            for obj in model['objs']:
+                if mat != None:
+                    if len(obj.data.materials) == 0:
+                        obj.data.materials.append(mat)
+                    else:
+                        obj.data.materials[0] = mat
+        
+        # start render timer
+        render_start = time.time()
+        
+        # render image JPEG
+        bpy.context.scene.render.image_settings.quality = 92
+        bpy.context.scene.render.image_settings.file_format = 'JPEG'
+        bpy.context.scene.render.filepath = os.path.splitext(os.path.realpath(args.output))[0] + '_' + style + '.jpg'
+        bpy.ops.render.render(write_still=1)
+        
+        # end timer
+        render_end = time.time()
+        render_times.append(secondsToMMSS(render_end - render_start))
+        
     
     # end timer
     end_time = time.time()
     total_time = secondsToMMSS(end_time - start_time)
     load_time = secondsToMMSS(mid_time - start_time)
-    render_time = secondsToMMSS(end_time - mid_time)
 
-    print(f'APP> total time: {total_time}')
-    print(f'       model/scene load time {load_time}')
-    print(f'       render {dim_x}x{dim_y} time {render_time}')
-    
+    print(f'APP> total,load,', end='')
+    for style in render_styles:
+        print(f'{style},', end='')
+    print('')
+    print(f'{total_time},{load_time},', end='')
+    for rtime in render_times:
+        print(f'{rtime},', end='')
+    print('')
 
 
 def selectRenderDevice(cycles_prefs, device_type, device_number):
