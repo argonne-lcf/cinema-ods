@@ -93,10 +93,24 @@
                     console.log(cdb.data);
                     
                     // get entry by row index
-                    let start_t = Date.now();
+                    let time_start = Date.now();
                     let entry = cdb.getRow(0);
+                    let select_time = Date.now() - time_start;
                     dome_texture.updateURL(cinemaods_url + '/' + entry.FILE, null, () => {
-                        console.log('loaded in ' + (Date.now() - start_t) + 'ms');
+                        let decode_end = Date.now();
+                        let resource_list = window.performance.getEntriesByType('resource');
+                        let full_img_url = cinemaods_url + '/' + entry.FILE;
+                        if (full_img_url.substring(0, 4) !== 'http') {
+                            full_img_url = window.location.href + (window.location.href[window.location.href.length - 1] === '/' ? '' : '/') + full_img_url;
+                        }
+                        for (let i = 0; i < resource_list.length; i++) {
+                            if (resource_list[i].initiatorType == 'img' && resource_list[i].name === full_img_url) {
+                                let total_time = decode_end - time_start;
+                                let download_time = Math.round(resource_list[i].responseEnd - resource_list[i].domainLookupStart);
+                                let decode_time = total_time - select_time - download_time;
+                                console.log('select: ' + select_time + 'ms, download: ' + download_time + 'ms, decode: ' + decode_time + 'ms, total: ' + total_time + 'ms');
+                            }
+                        }
                     });
                     
                     // get entry by field values
