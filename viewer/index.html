@@ -1,0 +1,121 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="utf-8"/>
+    <meta name="viewport" content="width=device-width, initial-scale=1"/>
+    <meta name='mobile-web-app-capable' content='yes'>
+    <meta name='apple-mobile-web-app-capable' content='yes'>
+    <title>Omnidirectional Stereo Image Viewer</title>
+    <link rel="stylesheet" href="css/style.css"/>
+    <script type="application/javascript" src="https://cdn.babylonjs.com/babylon.js"></script>
+    <script type="application/javascript" src="https://cdn.babylonjs.com/gui/babylon.gui.min.js"></script>
+    <script type="application/javascript" src="js/cinemaodsreader.js"></script>
+    <script type="application/javascript">
+        let xr_control;
+        let cdb;
+        let scene;
+        let photodome;
+        let sphere;
+        
+        function init() {
+            // get the canvas element
+            let canvas = document.getElementById('render');
+            // generate the Babylon 3D engine
+            let engine = new BABYLON.Engine(canvas, true);
+
+            // create scene
+            createScene(canvas, engine);
+        }
+        
+        function createScene(canvas, engine) {
+            // creates a basic Babylon Scene object (non-mesh)
+            scene = new BABYLON.Scene(engine);
+            
+            // add a camera to the scene and attach it to the canvas
+            let camera = new BABYLON.ArcRotateCamera('camera', -Math.PI / 2,  Math.PI / 2, 0.001, 
+                                                     BABYLON.Vector3.Zero(), scene);
+            camera.attachControl(canvas, true);
+            camera.inputs.attached.mousewheel.detachControl(canvas);
+            camera.znear = 0.1;
+            camera.zfar = 1000.0;
+            
+            // add photo dome (equirectangular panorama)
+            photodome = new BABYLON.PhotoDome(
+                'ods_dome',
+                'data/loading.jpg',
+                {
+                    resolution: 32,
+                    size: 500
+                },
+                scene
+            );
+            photodome.imageMode = BABYLON.PhotoDome.MODE_TOPBOTTOM;
+            
+            // default environment
+            const environment = scene.createDefaultEnvironment();
+
+            // WebXR
+            scene.createDefaultXRExperienceAsync({floorMeshes: [environment.ground]})
+            .then((xr_helper) => {
+                xr_control = xr_helper;
+                xr_control.teleportation.detach();
+
+                startRenderLoop(engine);
+            })
+            .catch((err) => {
+                console.log(err);
+            });
+            
+            // add invisible sphere for pointer intersection
+            sphere = BABYLON.MeshBuilder.CreateSphere('sphere', {diameter: 4.0, segments: 32}, scene);
+            sphere.position = new BABYLON.Vector3(0.0, 0.0, 0.0);
+            sphere.material = new BABYLON.StandardMaterial('sphereMaterial', scene);
+            sphere.material.backFaceCulling = false;
+            sphere.material.alpha = 0.0;
+        
+            // load cinema database
+            let cinemaods_url = 'data/MicrofluidicCTC.cdb'
+            cdb = new CinemaOdsReader(cinemaods_url);
+            cdb.read().then(() => {
+                console.log(cdb.fields);
+                console.log(cdb.data);
+                
+                // get entry by row index
+                let entry = cdb.getRow(0);
+                let texture = new BABYLON.Texture(cinemaods_url + '/' + entry.FILE, scene, false, false);
+                photodome.photoTexture = texture;
+                
+                // get entry by field values
+                //let entry = cdb.getRow({'Time Step': 87, 'Camera Position': 'center', 'Streamlines': true, 'Cell Color': 'force', 'Transparent': false});
+                //console.log('Entry by field values:', cinemaods_url + '/' + entry.FILE);
+            });
+        }
+        
+        function startRenderLoop(engine) {
+            // register a render loop to repeatedly render the scene
+            engine.runRenderLoop(() => {
+                sphere.position = scene.activeCamera.position;
+                scene.render();
+            });
+
+            // watch for browser/canvas resize events
+            window.addEventListener('resize', () => {
+                engine.resize();
+            });
+        }
+        
+        function exitVr() {
+            xr_control.baseExperience.exitXRAsync().then(() => {
+                // nothing
+            });
+        }
+    </script>
+</head>
+<body onload="init()">
+    <div id="instructions">
+        <h1>Instructions</h1>
+        <p>Click on the VR Headset icon in the bottom-right to enter immersive mode. If this icon is not shown, your device does not support virtual reality for this application.</p>
+    </div>
+    <canvas id="render" touch-action="none"></canvas>
+</body>
+</html>
