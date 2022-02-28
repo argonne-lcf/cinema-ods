@@ -88,6 +88,8 @@
                 // get entry by field values
                 //let entry = cdb.getRow({'Time Step': 87, 'Camera Position': 'center', 'Streamlines': true, 'Cell Color': 'force', 'Transparent': false});
                 //console.log('Entry by field values:', cinemaods_url + '/' + entry.FILE);
+            }).catch((err) => {
+                console.log(err);
             });
         }
         
