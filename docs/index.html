@@ -15,6 +15,7 @@
         let cdb;
         let scene;
         let photodome;
+        let dome_texture;
         let sphere;
         
         function init() {
@@ -42,7 +43,7 @@
             // add photo dome (equirectangular panorama)
             photodome = new BABYLON.PhotoDome(
                 'ods_dome',
-                'data/loading.jpg',
+                null,
                 {
                     resolution: 32,
                     size: 500
@@ -50,6 +51,8 @@
                 scene
             );
             photodome.imageMode = BABYLON.PhotoDome.MODE_TOPBOTTOM;
+            dome_texture = new BABYLON.Texture('data/loading.jpg', scene, false, false, BABYLON.Texture.TRILINEAR_SAMPLINGMODE);
+            photodome.photoTexture = dome_texture;
             
             // default environment
             const environment = scene.createDefaultEnvironment();
@@ -81,9 +84,11 @@
                 console.log(cdb.data);
                 
                 // get entry by row index
+                let start_t = Date.now();
                 let entry = cdb.getRow(0);
-                let texture = new BABYLON.Texture(cinemaods_url + '/' + entry.FILE, scene, false, false);
-                photodome.photoTexture = texture;
+                dome_texture.updateURL(cinemaods_url + '/' + entry.FILE, null, () => {
+                    console.log('loaded in ' + (Date.now() - start_t) + 'ms');
+                });
                 
                 // get entry by field values
                 //let entry = cdb.getRow({'Time Step': 87, 'Camera Position': 'center', 'Streamlines': true, 'Cell Color': 'force', 'Transparent': false});
