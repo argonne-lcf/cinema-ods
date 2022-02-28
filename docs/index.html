@@ -75,30 +75,37 @@
             sphere.material = new BABYLON.StandardMaterial('sphereMaterial', scene);
             sphere.material.backFaceCulling = false;
             sphere.material.alpha = 0.0;
-        
-            // load cinema database
-            let cinemaods_url = 'data/MicrofluidicCTC.cdb'
-            cdb = new CinemaOdsReader(cinemaods_url);
-            cdb.read().then(() => {
-                console.log(cdb.fields);
-                console.log(cdb.data);
-                
-                // get entry by row index
-                let start_t = Date.now();
-                let entry = cdb.getRow(0);
-                dome_texture.updateURL(cinemaods_url + '/' + entry.FILE, null, () => {
-                    console.log('loaded in ' + (Date.now() - start_t) + 'ms');
-                });
-                
-                // get entry by field values
-                //let entry = cdb.getRow({'Time Step': 87, 'Camera Position': 'center', 'Streamlines': true, 'Cell Color': 'force', 'Transparent': false});
-                //console.log('Entry by field values:', cinemaods_url + '/' + entry.FILE);
-            }).catch((err) => {
-                console.log(err);
-            });
             
             // add GUI
             gui = BABYLON.MeshBuilder.CreatePlane('plane', {width: 1.0, height: 1.0}, scene);
+        }
+        
+        function selectCinemaDatabase() {
+            let lightbox = document.getElementById('lightbox');
+            let cinemaods_url = document.getElementById('cdb-inputtext').value;
+            // load cinema database
+            if (cinemaods_url !== '') {
+                lightbox.style.display = 'none';
+                
+                cdb = new CinemaOdsReader(cinemaods_url);
+                cdb.read().then(() => {
+                    console.log(cdb.fields);
+                    console.log(cdb.data);
+                    
+                    // get entry by row index
+                    let start_t = Date.now();
+                    let entry = cdb.getRow(0);
+                    dome_texture.updateURL(cinemaods_url + '/' + entry.FILE, null, () => {
+                        console.log('loaded in ' + (Date.now() - start_t) + 'ms');
+                    });
+                    
+                    // get entry by field values
+                    //let entry = cdb.getRow({'Time Step': 87, 'Camera Position': 'center', 'Streamlines': true, 'Cell Color': 'force', 'Transparent': false});
+                    //console.log('Entry by field values:', cinemaods_url + '/' + entry.FILE);
+                }).catch((err) => {
+                    console.log(err);
+                });
+            }
         }
         
         function startRenderLoop(engine) {
@@ -122,6 +129,13 @@
     </script>
 </head>
 <body onload="init()">
+    <div id="lightbox">
+        <div id="cdb-inputcontainer">
+            <h1>Cinema ODS Database</h1>
+            <label>URL:</label><input id="cdb-inputtext" type="text" placeholder="address of .cdb folder" /><br />
+            <button type="button" onclick="selectCinemaDatabase()">Load</button>
+        </div>
+    </div>
     <div id="instructions">
         <h1>Instructions</h1>
         <p>Click on the VR Headset icon in the bottom-right to enter immersive mode. If this icon is not shown, your device does not support virtual reality for this application.</p>
