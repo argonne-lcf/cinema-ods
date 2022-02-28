@@ -2,6 +2,7 @@ import argparse
 import math
 import os
 import sys
+import vtk
 
 def main():
     parser = argparse.ArgumentParser(description='Python VTK script for interpolating blood flow simulation data')
@@ -14,6 +15,30 @@ def main():
     args = parser.parse_args(sys.argv[1:])
     t = args.timestep
     
+    """
+    # VTK Interpolation
+    polydata0 = readVtkFileAsPolyData(args.t0_filename)
+    polydata1 = readVtkFileAsPolyData(args.t1_filename)
+    polydata_out = vtk.vtkPolyData()
+    vertices = vtk.vtkPoints()
+    vertices.SetNumberOfPoints(polydata0.GetNumberOfPoints())
+    for i in range(polydata0.GetNumberOfPoints()):
+        p0 = polydata0.GetPoint(i)
+        p1 = polydata1.GetPoint(i)
+        p_interp = p0[:]
+        if distance(p0, p1) <= args.max_distance:
+            p_interp_x = (1.0 - t) * p0[0] + t * p1[0]
+            p_interp_y = (1.0 - t) * p0[1] + t * p1[1]
+            p_interp_z = (1.0 - t) * p0[2] + t * p1[2]
+            p_interp = (p_interp_x, p_interp_y, p_interp_z)
+        vertices.SetPoint(i, p_interp)
+    polydata_out.SetPoints(vertices)
+    polydata_out.SetPolys(polydata0.GetPolys())
+    
+    writeVtkFile(polydata_out, args.output_filename)
+    """
+    
+    # Manual File Copy / Interpolation
     polydata0 = open(args.t0_filename, 'r')
     polydata1 = open(args.t1_filename, 'r')
     polydata_out = open(args.output_filename, 'w')
@@ -48,6 +73,30 @@ def main():
     polydata0.close()
     polydata1.close()
     polydata_out.close()
+
+
+def readVtkFileAsPolyData(filename):
+    # Read file
+    reader = vtk.vtkGenericDataObjectReader()
+    reader.SetFileName(filename)
+    reader.Update()
+    
+    # Verify data type is poly data
+    if not reader.IsFilePolyData():
+        print('Error: VTK file does not contain vtkPolyData')
+        exit()
+    
+    # Return vtkPolyData
+    return reader.GetPolyDataOutput()
+
+
+def writeVtkFile(polydata, vtpname):
+    # Save vtkPolyData
+    writer = vtk.vtkPolyDataWriter()
+    writer.SetFileName(vtpname)
+    writer.SetInputData(polydata)
+    writer.SetFileVersion(42) # 4.2 (older version) or 5.1 (newer version)
+    writer.Write()
 
 
 def distance(p0, p1):

@@ -16,8 +16,8 @@ def main():
     parser.add_argument('-w', '--resolution', type=int, default=3840, help='horizontal resolution to render image (will always have 2:1 aspect ratio)')
     parser.add_argument('-d', '--device', type=str, default='CPU', help='redner device (CPU, CUDA, OPTIX, OPENCL)')
     parser.add_argument('-i', '--device-id', type=int, default=0, help='device id')
-    parser.add_argument('-cp', '--camera-position', type=str, default='0.0,0.0,1.65', help='camera position (x,y,z)')
-    parser.add_argument('-cd', '--camera-direction', type=str, default='90,0,90', help='camera direction in degrees (x,y,z)')
+    parser.add_argument('-cp', '--camera-position', type=str, default='(0.0,0.0,1.65)', help='camera position (x,y,z)')
+    parser.add_argument('-cd', '--camera-direction', type=str, default='(90,0,90)', help='camera direction in degrees (x,y,z)')
     parser.add_argument('-rs', '--render-styles',type=str, default='solid', help='list of render styles (solid,force,solid-transparent,force-transparent) or all')
     parser.add_argument('-o', '--output', type=str, default='output.jpg', help='filename to save rendered output')
 
@@ -30,10 +30,12 @@ def main():
     # render device
     device_hw = 'CPU'
     device_type = 'CPU'
+    render_device = 'NONE'
     if args.device in ['CPU', 'CUDA', 'OPTIX', 'OPENCL']:
         device_type = args.device
         if device_type != 'CPU':
             device_hw = 'GPU'
+            render_device = device_type
     else:
         print(f'APP> Warning: render device {args.device} not recognized, using {device_type} instead')
     device_number = args.device_id
@@ -42,8 +44,8 @@ def main():
     model_dir = os.path.realpath(args.model_dir)
     
     # camera and point light location
-    cam_position = args.camera_position.split(',')
-    cam_direction = args.camera_direction.split(',')
+    cam_position = args.camera_position.strip('()').split(',')
+    cam_direction = args.camera_direction.strip('()').split(',')
     if len(cam_position) == 3:
         cam_position = (float(cam_position[0]), float(cam_position[1]), float(cam_position[2]))
     else:
@@ -70,7 +72,7 @@ def main():
     bpy.context.scene.cycles.samples = 256
     cycles_prefs = bpy.context.preferences.addons['cycles'].preferences
     try:
-        cycles_prefs.compute_device_type = device_type
+        cycles_prefs.compute_device_type = render_device
     except TypeError:
         print(f'APP> Error: render device type \'{device_type}\' not available')
         exit(1)
