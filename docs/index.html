@@ -78,6 +78,213 @@
             
             // add GUI
             gui = BABYLON.MeshBuilder.CreatePlane('plane', {width: 1.0, height: 1.0}, scene);
+            
+            getCinemaCsv('data.csv').then((data) => {
+                console.log(data);
+                
+                let num_gui = 0;
+                for (let i = 0; i < data.header.length; i++){
+                    //check, radio, slider * 48
+                    if (data.header[i].type == "RADIO"){
+                        num_gui = num_gui + data.header[i].options.length + 1;
+                    } else {
+                        num_gui = num_gui + 2;
+                    }
+                }
+
+                // add GUI
+                let gui_height = (228 + num_gui * 56);
+                let gui_width = 1000;
+                gui.scaling = new BABYLON.Vector3(0.75, 0.75 * (gui_height/gui_width), 1.0);
+                gui.position = new BABYLON.Vector3(0.7, -0.15, 1.0)
+                gui.lookAt(gui.position.multiply(new BABYLON.Vector3(2, 2, 2)));
+                //let advanced_texture = BABYLON.GUI.AdvancedDynamicTexture.CreateForMesh(gui, 1024, 635);
+                let advanced_texture = BABYLON.GUI.AdvancedDynamicTexture.CreateForMesh(gui, gui_width, gui_height);
+                let panel = new BABYLON.GUI.StackPanel();
+                panel.width = gui_width + 'px';
+                panel.height = gui_height + 'px';
+                panel.background = 'rgba(255, 255, 255, 0.6)';   
+                advanced_texture.addControl(panel);
+                // header
+                let header = new BABYLON.GUI.TextBlock();
+                header.text = 'Cinema ODS Controls';
+                header.height = '132px';
+                header.width = '1000px';
+                header.color = '#000000';
+                header.textHorizontalAlignment = BABYLON.GUI.Control.HORIZONTAL_ALIGNMENT_CENTER;
+                header.fontSize = '96px';
+                panel.addControl(header);
+
+                for (let i = 0; i < data.header.length; i++){
+                    //look at radio, check, slider
+                    if (data.header[i].type == "RADIO"){
+                        let radio_header = new BABYLON.GUI.TextBlock();
+                        radio_header.text = data.header[i].name;
+                        radio_header.height = '72px';
+                        radio_header.width = '960px';
+                        radio_header.color = '#000000';
+                        radio_header.textHorizontalAlignment = BABYLON.GUI.Control.HORIZONTAL_ALIGNMENT_LEFT;
+                        radio_header.fontSize = '64px';
+                        panel.addControl(radio_header);
+
+                        gui_elements[data.header[i].name] = {};
+
+                        for (let j = 0; j < data.header[i].options.length; j++){
+                            let radio_panel = new BABYLON.GUI.StackPanel();
+                            radio_panel.width = '960px';
+                            radio_panel.height = '64px';
+                            radio_panel.isVertical = false;
+                            radio_panel.horizontalAlignment = BABYLON.GUI.Control.HORIZONTAL_ALIGNMENT_CENTER;
+                            radio_panel.verticalAlignment = BABYLON.GUI.Control.VERTICAL_ALIGNMENT_CENTER;
+
+                            let radio_spacer = new BABYLON.GUI.TextBlock();
+                            radio_spacer.text = ' ';
+                            radio_spacer.width = '50px';
+                            radio_spacer.color = '#000000';
+                            radio_spacer.textHorizontalAlignment = BABYLON.GUI.Control.HORIZONTAL_ALIGNMENT_LEFT;
+                            radio_spacer.fontSize = '48px';
+                            radio_panel.addControl(radio_spacer);
+
+                            let radio_button = new BABYLON.GUI.RadioButton();
+                            radio_button.width = '50px';
+                            radio_button.height = '50px';
+                            radio_button.isChecked = j == 0;
+                            radio_button.checkSizeRatio = 0.7;
+                            radio_button.group = data.header[i].name;
+                            radio_button.color = '#28923D';
+                            radio_button.onIsCheckedChangedObservable.add(guiUpdated);
+                            radio_panel.addControl(radio_button);
+                            gui_elements[data.header[i].name][data.header[i].options[j]] = radio_button;
+
+                            let radio_label = new BABYLON.GUI.TextBlock();
+                            radio_label.text = ' ' + data.header[i].options[j];
+                            radio_label.width = '200px';
+                            radio_label.color = '#000000';
+                            radio_label.textHorizontalAlignment = BABYLON.GUI.Control.HORIZONTAL_ALIGNMENT_LEFT;
+                            radio_label.fontSize = '48px';
+                            radio_panel.addControl(radio_label);
+                            panel.addControl(radio_panel);
+
+                        }
+                        
+                    } else if (data.header[i].type == "CHECK"){
+                        let check_header = new BABYLON.GUI.TextBlock();
+                        check_header.text = data.header[i].name;
+                        check_header.height = '72px';
+                        check_header.width = '960px';
+                        check_header.color = '#000000';
+                        check_header.textHorizontalAlignment = BABYLON.GUI.Control.HORIZONTAL_ALIGNMENT_LEFT;
+                        check_header.fontSize = '64px';
+                        panel.addControl(check_header);
+
+                        let check_panel = new BABYLON.GUI.StackPanel();
+                        check_panel.width = '960px';
+                        check_panel.height = '64px';
+                        check_panel.isVertical = false;
+                        check_panel.horizontalAlignment = BABYLON.GUI.Control.HORIZONTAL_ALIGNMENT_CENTER;
+                        check_panel.verticalAlignment = BABYLON.GUI.Control.VERTICAL_ALIGNMENT_CENTER;
+                        
+                        let check_spacer = new BABYLON.GUI.TextBlock();
+                        check_spacer.text = ' ';
+                        check_spacer.width = '50px';
+                        check_spacer.color = '#000000';
+                        check_spacer.textHorizontalAlignment = BABYLON.GUI.Control.HORIZONTAL_ALIGNMENT_LEFT;
+                        check_spacer.fontSize = '48px';
+                        check_panel.addControl(check_spacer);
+
+                        let checkbox = new BABYLON.GUI.Checkbox();
+                        checkbox.width = '50px';
+                        checkbox.height = '50px';
+                        checkbox.isChecked = false;
+                        checkbox.checkSizeRatio = 0.7;
+                        checkbox.color = '#28923D';
+                        checkbox.textHorizontalAlignment = BABYLON.GUI.Control.HORIZONTAL_ALIGNMENT_LEFT;
+                        checkbox.onIsCheckedChangedObservable.add(guiUpdated);
+                        check_panel.addControl(checkbox);
+                        gui_elements[data.header[i].name] = checkbox;
+
+                        let check_label = new BABYLON.GUI.TextBlock();
+                        check_label.text = ' On / Off';
+                        check_label.width = '200px';
+                        check_label.color = '#000000';
+                        check_label.textHorizontalAlignment = BABYLON.GUI.Control.HORIZONTAL_ALIGNMENT_LEFT;
+                        check_label.fontSize = '48px';
+                        check_panel.addControl(check_label);
+                        panel.addControl(check_panel);
+
+                    } else if (data.header[i].type == "RANGE"){
+                        //slider
+                        let slider_header = new BABYLON.GUI.TextBlock();
+                        slider_header.text = data.header[i].name;
+                        slider_header.height = '72px';
+                        slider_header.width = '960px';
+                        slider_header.color = '#000000';
+                        slider_header.textHorizontalAlignment = BABYLON.GUI.Control.HORIZONTAL_ALIGNMENT_LEFT;
+                        slider_header.fontSize = '64px';
+                        panel.addControl(slider_header);
+
+                        let slider_panel = new BABYLON.GUI.StackPanel();
+                        slider_panel.width = '960px';
+                        slider_panel.height = '96px';
+                        slider_panel.isVertical = false;
+                        slider_panel.horizontalAlignment = BABYLON.GUI.Control.HORIZONTAL_ALIGNMENT_CENTER;
+                        slider_panel.verticalAlignment = BABYLON.GUI.Control.VERTICAL_ALIGNMENT_CENTER;
+                        /*
+                        let radio_spacer = new BABYLON.GUI.TextBlock();
+                        radio_spacer.text = ' ';
+                        radio_spacer.width = '50px'; 
+                        radio_spacer.color = '#000000';
+                        radio_spacer.textHorizontalAlignment = BABYLON.GUI.Control.HORIZONTAL_ALIGNMENT_LEFT;
+                        radio_spacer.fontSize = '48px';
+                        radio_panel.addControl(radio_spacer);
+                        */
+                        let chosen_slider = new BABYLON.GUI.Slider();
+                        chosen_slider.width = '760px';
+                        chosen_slider.height = '40px';
+                        chosen_slider.thumbWidth = '30px';
+                        chosen_slider.value = 0;
+                        chosen_slider.minimum = data.header[i].start;
+                        chosen_slider.maximum =  data.header[i].end;
+                        chosen_slider.step = 1;
+                        chosen_slider.onValueChangedObservable.add(guiUpdated);
+                        slider_panel.addControl(chosen_slider);
+
+                        gui_elements[data.header[i].name] = chosen_slider;
+
+                        let slider_label = new BABYLON.GUI.TextBlock();
+                        slider_label.text = ' 0';
+                        slider_label.width = '200px';
+                        slider_label.color = '#000000';
+                        slider_label.textHorizontalAlignment = BABYLON.GUI.Control.HORIZONTAL_ALIGNMENT_LEFT;
+                        slider_label.fontSize = '48px';
+                        slider_panel.addControl(slider_label);
+                        chosen_slider.onValueChangedObservable.add((value) => {
+                            slider_label.text = ' ' + (value);
+                        });
+                        panel.addControl(slider_panel);
+                    } else {
+                        //don't do anything for the files
+                    }
+                }
+                //leave vr
+                let button_panel = new BABYLON.GUI.StackPanel();
+                button_panel.width = '960px';
+                button_panel.height = '96px';
+                button_panel.isVertical = false;
+                button_panel.horizontalAlignment = BABYLON.GUI.Control.HORIZONTAL_ALIGNMENT_CENTER;
+                button_panel.verticalAlignment = BABYLON.GUI.Control.VERTICAL_ALIGNMENT_CENTER;
+                let leave_vr_button = BABYLON.GUI.Button.CreateSimpleButton('leave_vr', 'Exit VR');
+                leave_vr_button.width = '300px';
+                leave_vr_button.height = '72px';
+                leave_vr_button.color = '#FFFFFF';
+                leave_vr_button.background = '#B81204';
+                leave_vr_button.fontSize = '48px';
+                leave_vr_button.onPointerClickObservable.add(exitVr);
+                button_panel.addControl(leave_vr_button);
+                panel.addControl(button_panel);
+            }).catch((err)=> {
+                console.log(err);
+            });
         }
         
         function selectCinemaDatabase() {
