@@ -21,6 +21,7 @@
         let sphere;
         let gui;
         let gui_elements;
+        let play_button;
         let cinemaods_url;
         
         function init() {
@@ -97,6 +98,7 @@
             // initialize GUI
             gui = null;
             gui_elements = {};
+            play_button = null;
         }
         
         function selectCinemaDatabase() {
@@ -120,12 +122,12 @@
         }
         
         function buildGui() {
-            let i, j;
+            let i, j, k;
             let gui_height = 132;
             let gui_width = 1000;
             for (i = 0; i < cdb.fields.length; i++) {
                 if (cdb.fields[i].type == 'RADIO') {
-                    gui_height += 72 + (64 * cdb.fields[i].options.length);
+                    gui_height += 72 + (64 * Math.ceil(cdb.fields[i].options.length / 2));
                 }
                 else if (cdb.fields[i].type == 'CHECKBOX') {
                     gui_height += 72 + 64;
@@ -157,6 +159,14 @@
             header.textHorizontalAlignment = BABYLON.GUI.Control.HORIZONTAL_ALIGNMENT_CENTER;
             header.fontSize = '96px';
             panel.addControl(header);
+            
+            // play-pause and exit button panel
+            let button_panel = new BABYLON.GUI.StackPanel();
+            button_panel.width = '960px';
+            button_panel.height = '96px';
+            button_panel.isVertical = false;
+            button_panel.horizontalAlignment = BABYLON.GUI.Control.HORIZONTAL_ALIGNMENT_CENTER;
+            button_panel.verticalAlignment = BABYLON.GUI.Control.VERTICAL_ALIGNMENT_CENTER;
 
             for (i = 0; i < cdb.fields.length; i++) {
                 if (cdb.fields[i].type == 'RADIO'){
@@ -171,7 +181,7 @@
 
                     gui_elements[cdb.fields[i].name] = {};
 
-                    for (j = 0; j < cdb.fields[i].options.length; j++) {
+                    for (j = 0; j < cdb.fields[i].options.length; j+=2) {
                         let radio_panel = new BABYLON.GUI.StackPanel();
                         radio_panel.width = '960px';
                         radio_panel.height = '64px';
@@ -179,44 +189,49 @@
                         radio_panel.horizontalAlignment = BABYLON.GUI.Control.HORIZONTAL_ALIGNMENT_CENTER;
                         radio_panel.verticalAlignment = BABYLON.GUI.Control.VERTICAL_ALIGNMENT_CENTER;
 
-                        let radio_spacer = new BABYLON.GUI.TextBlock();
-                        radio_spacer.text = ' ';
-                        radio_spacer.width = '50px';
-                        radio_spacer.color = '#000000';
-                        radio_spacer.textHorizontalAlignment = BABYLON.GUI.Control.HORIZONTAL_ALIGNMENT_LEFT;
-                        radio_spacer.fontSize = '48px';
-                        radio_panel.addControl(radio_spacer);
+                        for (k = 0; k < 2; k++) {
+                            if (j + k < cdb.fields[i].options.length) {
+                                let radio_spacer = new BABYLON.GUI.TextBlock();
+                                radio_spacer.text = ' ';
+                                radio_spacer.width = '50px';
+                                radio_spacer.color = '#000000';
+                                radio_spacer.textHorizontalAlignment = BABYLON.GUI.Control.HORIZONTAL_ALIGNMENT_LEFT;
+                                radio_spacer.fontSize = '48px';
+                                radio_panel.addControl(radio_spacer);
 
-                        let radio_button = new BABYLON.GUI.RadioButton();
-                        radio_button.width = '50px';
-                        radio_button.height = '50px';
-                        radio_button.isChecked = (j == 0);
-                        radio_button.checkSizeRatio = 0.7;
-                        radio_button.group = cdb.fields[i].name;
-                        radio_button.color = '#28923D';
-                        let group_name = cdb.fields[i].name;
-                        radio_button.onIsCheckedChangedObservable.add((value) => {
-                            let key;
-                            let num_checked = 0;
-                            for (key in gui_elements[group_name]) {
-                                if (gui_elements[group_name][key].isChecked) {
-                                    num_checked++;
-                                }
-                            }
-                            if (num_checked === 1) {
-                                guiUpdated(value);
-                            }
-                        });
-                        radio_panel.addControl(radio_button);
-                        gui_elements[cdb.fields[i].name][cdb.fields[i].options[j]] = radio_button;
+                                let radio_button = new BABYLON.GUI.RadioButton();
+                                radio_button.width = '50px';
+                                radio_button.height = '50px';
+                                radio_button.isChecked = ((j + k) == 0);
+                                radio_button.checkSizeRatio = 0.7;
+                                radio_button.group = cdb.fields[i].name;
+                                radio_button.color = '#28923D';
+                                let group_name = cdb.fields[i].name;
+                                radio_button.onIsCheckedChangedObservable.add((value) => {
+                                    let key;
+                                    let num_checked = 0;
+                                    for (key in gui_elements[group_name]) {
+                                        if (gui_elements[group_name][key].isChecked) {
+                                            num_checked++;
+                                        }
+                                    }
+                                    if (num_checked === 1) {
+                                        guiUpdated(value);
+                                    }
+                                });
+                                radio_panel.addControl(radio_button);
+                                gui_elements[cdb.fields[i].name][cdb.fields[i].options[j + k]] = radio_button;
 
-                        let radio_label = new BABYLON.GUI.TextBlock();
-                        radio_label.text = ' ' + cdb.fields[i].options[j];
-                        radio_label.width = '200px';
-                        radio_label.color = '#000000';
-                        radio_label.textHorizontalAlignment = BABYLON.GUI.Control.HORIZONTAL_ALIGNMENT_LEFT;
-                        radio_label.fontSize = '48px';
-                        radio_panel.addControl(radio_label);
+                                let radio_label = new BABYLON.GUI.TextBlock();
+                                radio_label.text = ' ' + cdb.fields[i].options[j + k];
+                                radio_label.width = '200px';
+                                radio_label.color = '#000000';
+                                radio_label.textHorizontalAlignment = BABYLON.GUI.Control.HORIZONTAL_ALIGNMENT_LEFT;
+                                radio_label.fontSize = '48px';
+                                radio_panel.addControl(radio_label);
+                            }
+                        }
+                        
                         panel.addControl(radio_panel);
                     }
                 }
@@ -309,17 +324,26 @@
                     });
                     panel.addControl(slider_panel);
                 }
-                else {
-                    // don't do anything for the files
+                else if (cdb.fields[i].type === 'FILE' && cdb.fields[i].name === 'FILEvideo') {
+                    play_button = BABYLON.GUI.Button.CreateSimpleButton('play_pause', 'Play');
+                    play_button.width = '300px';
+                    play_button.height = '72px';
+                    play_button.color = '#FFFFFF';
+                    play_button.background = '#28923D';
+                    play_button.fontSize = '48px';
+                    play_button.onPointerClickObservable.add(playPauseVideo);
+                    button_panel.addControl(play_button);
+                    
+                    let button_spacer = new BABYLON.GUI.TextBlock();
+                    button_spacer.text = ' ';
+                    button_spacer.width = '50px';
+                    button_spacer.color = '#000000';
+                    button_spacer.textHorizontalAlignment = BABYLON.GUI.Control.HORIZONTAL_ALIGNMENT_LEFT;
+                    button_spacer.fontSize = '48px';
+                    button_panel.addControl(button_spacer);
                 }
             }
             //leave vr
-            let button_panel = new BABYLON.GUI.StackPanel();
-            button_panel.width = '960px';
-            button_panel.height = '96px';
-            button_panel.isVertical = false;
-            button_panel.horizontalAlignment = BABYLON.GUI.Control.HORIZONTAL_ALIGNMENT_CENTER;
-            button_panel.verticalAlignment = BABYLON.GUI.Control.VERTICAL_ALIGNMENT_CENTER;
             let leave_vr_button = BABYLON.GUI.Button.CreateSimpleButton('leave_vr', 'Exit VR');
             leave_vr_button.width = '300px';
             leave_vr_button.height = '72px';
@@ -393,6 +417,16 @@
                 backbuffer = 1 - backbuffer;
                 frontbuffer = 1 - frontbuffer;
             });
+        }
+        
+        function playPauseVideo() {
+            // TODO: implement this!
+            if (play_button.textBlock.text === 'Play') {
+                play_button.textBlock.text = 'Pause';
+            }
+            else {
+                play_button.textBlock.text = 'Play';
+            }
         }
         
         function getFieldIndex(field_arr, field_name){
