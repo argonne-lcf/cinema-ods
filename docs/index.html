@@ -14,11 +14,14 @@
         let xr_control;
         let cdb;
         let scene;
-        let photodome;
-        let dome_texture;
+        let photodomes;
+        let dome_textures;
+        let frontbuffer;
+        let backbuffer;
         let sphere;
         let gui;
         let gui_elements;
+        let cinemaods_url;
         
         function init() {
             // get the canvas element
@@ -42,19 +45,32 @@
             camera.zfar = 1000.0;
             
             // add photo dome (equirectangular panorama)
-            photodome = new BABYLON.PhotoDome(
-                'ods_dome',
-                null,
-                {
-                    resolution: 32,
-                    size: 500
-                },
-                scene
-            );
-            photodome.imageMode = BABYLON.PhotoDome.MODE_TOPBOTTOM;
-            photodome.addRotation(0, Math.PI / 2, 0);
-            dome_texture = new BABYLON.Texture('data/loading.jpg', scene, false, false, BABYLON.Texture.TRILINEAR_SAMPLINGMODE);
-            photodome.photoTexture = dome_texture;
+            let i;
+            frontbuffer = 0;
+            backbuffer = 1;
+            photodomes = [];
+            dome_textures = [];
+            for (i = 0; i < 2; i++) {
+                let photodome = new BABYLON.PhotoDome(
+                    'ods_dome',
+                    null,
+                    {
+                        resolution: 32,
+                        size: 500
+                    },
+                    scene
+                );
+                photodome.imageMode = BABYLON.PhotoDome.MODE_TOPBOTTOM;
+                photodome.addRotation(0, Math.PI / 2, 0);
+                let dome_texture = new BABYLON.Texture('data/loading.jpg', scene, false, false, BABYLON.Texture.TRILINEAR_SAMPLINGMODE);
+                photodome.photoTexture = dome_texture;
+                if (i == backbuffer) {
+                    photodome.setEnabled(false);
+                }
+                
+                photodomes.push(photodome)
+                dome_textures.push(dome_texture);
+            }
             
             // default environment
             const environment = scene.createDefaultEnvironment();
@@ -85,7 +101,7 @@
         
         function selectCinemaDatabase() {
             let lightbox = document.getElementById('lightbox');
-            let cinemaods_url = document.getElementById('cdb-inputtext').value;
+            cinemaods_url = document.getElementById('cdb-inputtext').value;
             // load cinema database
             if (cinemaods_url !== '') {
                 lightbox.style.display = 'none';
@@ -94,31 +110,6 @@
                 cdb.read().then(() => {
                     console.log(cdb.fields);
                     console.log(cdb.data);
-                    
-                    // get entry by row index
-                    let time_start = Date.now();
-                    let entry = cdb.getRow(0);
-                    let select_time = Date.now() - time_start;
-                    dome_texture.updateURL(cinemaods_url + '/' + entry.FILE, null, () => {
-                        let decode_end = Date.now();
-                        let resource_list = window.performance.getEntriesByType('resource');
-                        let full_img_url = cinemaods_url + '/' + entry.FILE;
-                        if (full_img_url.substring(0, 4) !== 'http') {
-                            full_img_url = window.location.href + (window.location.href[window.location.href.length - 1] === '/' ? '' : '/') + full_img_url;
-                        }
-                        for (let i = 0; i < resource_list.length; i++) {
-                            if (resource_list[i].initiatorType == 'img' && resource_list[i].name === full_img_url) {
-                                let total_time = decode_end - time_start;
-                                let download_time = Math.round(resource_list[i].responseEnd - resource_list[i].fetchStart);
-                                let decode_time = total_time - select_time - download_time;
-                                console.log('select: ' + select_time + 'ms, download: ' + download_time + 'ms, decode: ' + decode_time + 'ms, total: ' + total_time + 'ms');
-                            }
-                        }
-                    });
-                    
-                    // get entry by field values
-                    //let entry = cdb.getRow({'Time Step': 87, 'Camera Position': 'center', 'Streamlines': true, 'Cell Color': 'force', 'Transparent': false});
-                    //console.log('Entry by field values:', cinemaods_url + '/' + entry.FILE);
                     
                     // build gui
                     buildGui();
@@ -325,6 +316,9 @@
             leave_vr_button.onPointerClickObservable.add(exitVr);
             button_panel.addControl(leave_vr_button);
             panel.addControl(button_panel);
+            
+            // load first image
+            guiUpdated();
         }
         
         function startRenderLoop(engine) {
@@ -341,32 +335,51 @@
         }
         
         function guiUpdated(value) {
-            console.log(gui_elements);
-
+            let time_start = Date.now();
+            
             let field;
             let key;
             let row_values = {};
             for (field in gui_elements){
                 let field_index = getFieldIndex(cdb.fields, field);
-                if (cdb.fields[field_index].type == "CHECK"){
-                    //console.log(field, gui_elements[field].isChecked);
-                    row_values[field] = gui_elements[field].isChecked;
-                } else if (cdb.fields[field_index].type == "RANGE"){
-                    row_values[field] = gui_elements[field].value;
-                } else if (cdb.fields[field_index].type == "RADIO"){
-                    for (key in gui_elements[field]){
-                        console.log(key, gui_elements[field][key].isChecked);
-                        if (gui_elements[field][key].isChecked){
+                if (cdb.fields[field_index].type === 'RADIO') {
+                    for (key in gui_elements[field]) {
+                        if (gui_elements[field][key].isChecked) {
                             row_values[field] = key;
                         }
                     }
                 }
+                else if (cdb.fields[field_index].type === 'CHECK') {
+                    row_values[field] = gui_elements[field].isChecked;
+                }
+                else if (cdb.fields[field_index].type === 'RANGE') {
+                    row_values[field] = gui_elements[field].value;
+                }
             }
 
-            console.log(row_values);
-            let row = cdb.getRow(row_values);
-            console.log(row);
-            dome_texture.updateURL(cinemaods_url + '/' + row.FILE);
+            let entry = cdb.getRow(row_values);
+            let select_time = Date.now() - time_start;
+            dome_textures[backbuffer].updateURL(cinemaods_url + '/' + entry.FILE, null, () => {
+                let decode_end = Date.now();
+                let resource_list = window.performance.getEntriesByType('resource');
+                let full_img_url = cinemaods_url + '/' + entry.FILE;
+                if (full_img_url.substring(0, 4) !== 'http') {
+                    full_img_url = window.location.href + (window.location.href[window.location.href.length - 1] === '/' ? '' : '/') + full_img_url;
+                }
+                for (let i = 0; i < resource_list.length; i++) {
+                    if (resource_list[i].initiatorType == 'img' && resource_list[i].name === full_img_url) {
+                        let total_time = decode_end - time_start;
+                        let download_time = Math.round(resource_list[i].responseEnd - resource_list[i].fetchStart);
+                        let decode_time = total_time - select_time - download_time;
+                        console.log('select: ' + select_time + 'ms, download: ' + download_time + 'ms, decode: ' + decode_time + 'ms, total: ' + total_time + 'ms');
+                    }
+                }
+                
+                photodomes[backbuffer].setEnabled(true);
+                photodomes[frontbuffer].setEnabled(false);
+                backbuffer = 1 - backbuffer;
+                frontbuffer = 1 - frontbuffer;
+            });
         }
         
         function getFieldIndex(field_arr, field_name){
