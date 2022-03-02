@@ -342,6 +342,40 @@
         
         function guiUpdated(value) {
             console.log(gui_elements);
+
+            let field;
+            let key;
+            let row_values = {};
+            for (field in gui_elements){
+                let field_index = getFieldIndex(cdb.fields, field);
+                if (cdb.fields[field_index].type == "CHECK"){
+                    //console.log(field, gui_elements[field].isChecked);
+                    row_values[field] = gui_elements[field].isChecked;
+                } else if (cdb.fields[field_index].type == "RANGE"){
+                    row_values[field] = gui_elements[field].value;
+                } else if (cdb.fields[field_index].type == "RADIO"){
+                    for (key in gui_elements[field]){
+                        console.log(key, gui_elements[field][key].isChecked);
+                        if (gui_elements[field][key].isChecked){
+                            row_values[field] = key;
+                        }
+                    }
+                }
+            }
+
+            console.log(row_values);
+            let row = cdb.getRow(row_values);
+            console.log(row);
+            dome_texture.updateURL(cinemaods_url + '/' + row.FILE);
+        }
+        
+        function getFieldIndex(field_arr, field_name){
+            for (let i = 0; i < field_arr.length; i++){
+                if (field_arr[i].name == field_name){
+                    return i;
+                }
+            }
+            return -1;
         }
         
         function exitVr() {
