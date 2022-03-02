@@ -35,7 +35,7 @@
             scene = new BABYLON.Scene(engine);
             
             // add a camera to the scene and attach it to the canvas
-            let camera = new BABYLON.ArcRotateCamera('camera', -Math.PI / 4,  Math.PI / 2, 0.1, BABYLON.Vector3.Zero(), scene);
+            let camera = new BABYLON.ArcRotateCamera('camera', -Math.PI / 2,  Math.PI / 2, 0.1, BABYLON.Vector3.Zero(), scene);
             camera.attachControl(canvas, true);
             camera.inputs.attached.mousewheel.detachControl(canvas);
             camera.znear = 0.1;
@@ -52,6 +52,7 @@
                 scene
             );
             photodome.imageMode = BABYLON.PhotoDome.MODE_TOPBOTTOM;
+            photodome.addRotation(0, Math.PI / 2, 0);
             dome_texture = new BABYLON.Texture('data/loading.jpg', scene, false, false, BABYLON.Texture.TRILINEAR_SAMPLINGMODE);
             photodome.photoTexture = dome_texture;
             
