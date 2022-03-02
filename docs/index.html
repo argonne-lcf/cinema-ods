@@ -106,7 +106,7 @@
                         for (let i = 0; i < resource_list.length; i++) {
                             if (resource_list[i].initiatorType == 'img' && resource_list[i].name === full_img_url) {
                                 let total_time = decode_end - time_start;
-                                let download_time = Math.round(resource_list[i].responseEnd - resource_list[i].domainLookupStart);
+                                let download_time = Math.round(resource_list[i].responseEnd - resource_list[i].fetchStart);
                                 let decode_time = total_time - select_time - download_time;
                                 console.log('select: ' + select_time + 'ms, download: ' + download_time + 'ms, decode: ' + decode_time + 'ms, total: ' + total_time + 'ms');
                             }
