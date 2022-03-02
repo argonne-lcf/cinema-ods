@@ -194,7 +194,19 @@
                         radio_button.checkSizeRatio = 0.7;
                         radio_button.group = cdb.fields[i].name;
                         radio_button.color = '#28923D';
-                        radio_button.onIsCheckedChangedObservable.add(guiUpdated);
+                        let group_name = cdb.fields[i].name;
+                        radio_button.onIsCheckedChangedObservable.add((value) => {
+                            let key;
+                            let num_checked = 0;
+                            for (key in gui_elements[group_name]) {
+                                if (gui_elements[group_name][key].isChecked) {
+                                    num_checked++;
+                                }
+                            }
+                            if (num_checked === 1) {
+                                guiUpdated(value);
+                            }
+                        });
                         radio_panel.addControl(radio_button);
                         gui_elements[cdb.fields[i].name][cdb.fields[i].options[j]] = radio_button;
 
@@ -279,7 +291,8 @@
                     chosen_slider.minimum = cdb.fields[i].start;
                     chosen_slider.maximum =  cdb.fields[i].end;
                     chosen_slider.step = 1;
-                    chosen_slider.onValueChangedObservable.add(guiUpdated);
+                    //chosen_slider.onValueChangedObservable.add(guiUpdated);
+                    chosen_slider.onPointerUpObservable.add(guiUpdated);
                     slider_panel.addControl(chosen_slider);
 
                     gui_elements[cdb.fields[i].name] = chosen_slider;
