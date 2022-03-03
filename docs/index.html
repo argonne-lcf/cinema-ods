@@ -416,6 +416,9 @@
                     scene
                 );
                 videodome.videoMode = BABYLON.VideoDome.MODE_TOPBOTTOM;
+                videodome.videoTexture.video.addEventListener('ended', (event) => {
+                    playPauseVideo();
+                }, false);
                 videodome.addRotation(0, Math.PI / 2, 0);
             }
             else if (entry.hasOwnProperty('FILEvideo') && value !== 'PAUSE_VIDEO_TEXTURE') {
