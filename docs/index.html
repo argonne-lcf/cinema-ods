@@ -15,6 +15,7 @@
         let cdb;
         let scene;
         let photodomes;
+        let videodome;
         let dome_textures;
         let frontbuffer;
         let backbuffer;
@@ -53,7 +54,7 @@
             dome_textures = [];
             for (i = 0; i < 2; i++) {
                 let photodome = new BABYLON.PhotoDome(
-                    'ods_dome',
+                    'ods_dome' + i,
                     null,
                     {
                         resolution: 32,
@@ -72,6 +73,7 @@
                 photodomes.push(photodome)
                 dome_textures.push(dome_texture);
             }
+            videodome = null;
             
             // default environment
             const environment = scene.createDefaultEnvironment();
@@ -355,7 +357,7 @@
             panel.addControl(button_panel);
             
             // load first image
-            guiUpdated();
+            guiUpdated('CREATE_VIDEO_TEXTURE');
         }
         
         function startRenderLoop(engine) {
@@ -377,28 +379,7 @@
         
         function guiUpdated(value) {
             let time_start = Date.now();
-            
-            let field;
-            let key;
-            let row_values = {};
-            for (field in gui_elements){
-                let field_index = getFieldIndex(cdb.fields, field);
-                if (cdb.fields[field_index].type === 'RADIO') {
-                    for (key in gui_elements[field]) {
-                        if (gui_elements[field][key].isChecked) {
-                            row_values[field] = key;
-                        }
-                    }
-                }
-                else if (cdb.fields[field_index].type === 'CHECK') {
-                    row_values[field] = gui_elements[field].isChecked;
-                }
-                else if (cdb.fields[field_index].type === 'RANGE') {
-                    row_values[field] = gui_elements[field].value;
-                }
-            }
-
-            let entry = cdb.getRow(row_values);
+            let entry = getCdbRowFromGuiSelections();
             let select_time = Date.now() - time_start;
             dome_textures[backbuffer].updateURL(cinemaods_url + '/' + entry.FILE, null, () => {
                 let decode_end = Date.now();
@@ -421,15 +402,46 @@
                 backbuffer = 1 - backbuffer;
                 frontbuffer = 1 - frontbuffer;
             });
+            
+            if (value === 'CREATE_VIDEO_TEXTURE' && entry.hasOwnProperty('FILEvideo')) {
+                videodome = new BABYLON.VideoDome(
+                    'ods_viddome',
+                    cinemaods_url + '/' + entry.FILEvideo,
+                    {
+                        resolution: 32,
+                        size: 501,
+                        autoPlay: false,
+                        loop: false
+                    },
+                    scene
+                );
+                videodome.videoMode = BABYLON.VideoDome.MODE_TOPBOTTOM;
+                videodome.addRotation(0, Math.PI / 2, 0);
+            }
+            else if (entry.hasOwnProperty('FILEvideo') && value !== 'PAUSE_VIDEO_TEXTURE') {
+                videodome.videoTexture.updateURL(cinemaods_url + '/' + entry.FILEvideo);
+            }
         }
         
         function playPauseVideo() {
-            // TODO: implement this!
+            // TODO: don't hardcode framerate (24) or name of Time Step column
             if (play_button.textBlock.text === 'Play') {
                 play_button.textBlock.text = 'Pause';
+                
+                let entry = getCdbRowFromGuiSelections();
+                videodome.videoTexture.video.addEventListener('canplaythrough', (event) => {
+                    photodomes[frontbuffer].setEnabled(false);
+                    videodome.videoTexture.video.play();
+                }, {once: true});
+                videodome.videoTexture.video.currentTime = entry['Time Step'] / 24;
             }
             else {
                 play_button.textBlock.text = 'Play';
+                
+                videodome.videoTexture.video.pause();
+                let time_step = Math.round(videodome.videoTexture.video.currentTime * 24)
+                gui_elements['Time Step'].value = time_step;
+                guiUpdated('PAUSE_VIDEO_TEXTURE');
             }
         }
         
@@ -440,6 +452,30 @@
                 }
             }
             return -1;
+        }
+        
+        function getCdbRowFromGuiSelections() {
+            let field;
+            let key;
+            let row_values = {};
+            for (field in gui_elements){
+                let field_index = getFieldIndex(cdb.fields, field);
+                if (cdb.fields[field_index].type === 'RADIO') {
+                    for (key in gui_elements[field]) {
+                        if (gui_elements[field][key].isChecked) {
+                            row_values[field] = key;
+                        }
+                    }
+                }
+                else if (cdb.fields[field_index].type === 'CHECK') {
+                    row_values[field] = gui_elements[field].isChecked;
+                }
+                else if (cdb.fields[field_index].type === 'RANGE') {
+                    row_values[field] = gui_elements[field].value;
+                }
+            }
+
+            return cdb.getRow(row_values);
         }
         
         function exitVr() {
