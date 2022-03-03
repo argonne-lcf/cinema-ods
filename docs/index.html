@@ -362,6 +362,10 @@
             // register a render loop to repeatedly render the scene
             engine.runRenderLoop(() => {
                 sphere.position = scene.activeCamera.position;
+                if (gui !== null) {
+                    gui.position = scene.activeCamera.position.add(new BABYLON.Vector3(0.7, -0.15, 1.0))
+                    gui.lookAt(gui.position.multiply(new BABYLON.Vector3(2, 2, 2)).subtract(scene.activeCamera.position));
+                }
                 scene.render();
             });
 
