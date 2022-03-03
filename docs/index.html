@@ -403,6 +403,14 @@
                 frontbuffer = 1 - frontbuffer;
             });
             
+            if (videodome !== null && !videodome.videoTexture.video.paused) {
+                play_button.textBlock.text = 'Play';
+                
+                videodome.videoTexture.video.pause();
+                let time_step = Math.round(videodome.videoTexture.video.currentTime * 24)
+                gui_elements['Time Step'].value = time_step;
+            }
+            
             if (value === 'CREATE_VIDEO_TEXTURE' && entry.hasOwnProperty('FILEvideo')) {
                 videodome = new BABYLON.VideoDome(
                     'ods_viddome',
