@@ -14,11 +14,14 @@
         let xr_control;
         let cdb;
         let scene;
-        let photodome;
-        let dome_texture;
+        let videodome;
+        let dome_textures;
+        let frontbuffer;
+        let backbuffer;
         let sphere;
         let gui;
         let gui_elements;
+        let play_button;
         let cinemaods_url;
         
         function init() {
@@ -43,19 +46,33 @@
             camera.zfar = 1000.0;
             
             // add photo dome (equirectangular panorama)
-            photodome = new BABYLON.PhotoDome(
-                'ods_dome',
-                null,
-                {
-                    resolution: 32,
-                    size: 500
-                },
-                scene
-            );
-            photodome.imageMode = BABYLON.PhotoDome.MODE_TOPBOTTOM;
-            photodome.addRotation(0, Math.PI / 2, 0);
-            dome_texture = new BABYLON.Texture('data/loading.jpg', scene, false, false, BABYLON.Texture.TRILINEAR_SAMPLINGMODE);
-            photodome.photoTexture = dome_texture;
+            let i;
+            frontbuffer = 0;
+            backbuffer = 1;
+            photodomes = [];
+            dome_textures = [];
+            for (i = 0; i < 2; i++) {
+                let photodome = new BABYLON.PhotoDome(
+                    'ods_dome' + i,
+                    null,
+                    {
+                        resolution: 32,
+                        size: 500
+                    },
+                    scene
+                );
+                photodome.imageMode = BABYLON.PhotoDome.MODE_TOPBOTTOM;
+                photodome.addRotation(0, Math.PI / 2, 0);
+                let dome_texture = new BABYLON.Texture('data/loading.jpg', scene, false, false, BABYLON.Texture.TRILINEAR_SAMPLINGMODE);
+                photodome.photoTexture = dome_texture;
+                if (i == backbuffer) {
+                    photodome.setEnabled(false);
+                }
+                
+                photodomes.push(photodome)
+                dome_textures.push(dome_texture);
+            }
+            videodome = null;
             
             // default environment
             const environment = scene.createDefaultEnvironment();
@@ -65,6 +82,31 @@
             .then((xr_helper) => {
                 xr_control = xr_helper;
                 xr_control.teleportation.detach();
+                
+                xr_control.input.onControllerAddedObservable.add((controller) => {
+                    controller.onMotionControllerInitObservable.add((motion_controller) => {
+                        if (motion_controller.handness === 'right') {
+                            buttons = motion_controller.getAllComponentsOfType('button');
+                            if (buttons.length) {
+                                button_a = null;
+                                for (let i = 0; i < buttons.length; i++) {
+                                    if (buttons[i].id === 'a-button') {
+                                        button_a = buttons[i];
+                                    }
+                                }
+                                if (button_a !== null) {
+                                    button_a.onButtonStateChangedObservable.add(() => {
+                                        if (button_a.changes.pressed && button_a.pressed) {
+                                            console.log('A button pressed!');
+                                            buildGui().isVisible = false;
+                                            runTests();
+                                        }
+                                    });
+                                }
+                            }
+                        }
+                    });
+                });
 
                 startRenderLoop(engine);
             })
@@ -82,6 +124,7 @@
             // initialize GUI
             gui = null;
             gui_elements = {};
+            play_button = null;
         }
         
         function selectCinemaDatabase() {
@@ -96,31 +139,6 @@
                     console.log(cdb.fields);
                     console.log(cdb.data);
                     
-                    // get entry by row index
-                    let time_start = Date.now();
-                    let entry = cdb.getRow(0);
-                    let select_time = Date.now() - time_start;
-                    dome_texture.updateURL(cinemaods_url + '/' + entry.FILE, null, () => {
-                        let decode_end = Date.now();
-                        let resource_list = window.performance.getEntriesByType('resource');
-                        let full_img_url = cinemaods_url + '/' + entry.FILE;
-                        if (full_img_url.substring(0, 4) !== 'http') {
-                            full_img_url = window.location.href + (window.location.href[window.location.href.length - 1] === '/' ? '' : '/') + full_img_url;
-                        }
-                        for (let i = 0; i < resource_list.length; i++) {
-                            if (resource_list[i].initiatorType == 'img' && resource_list[i].name === full_img_url) {
-                                let total_time = decode_end - time_start;
-                                let download_time = Math.round(resource_list[i].responseEnd - resource_list[i].fetchStart);
-                                let decode_time = total_time - select_time - download_time;
-                                console.log('select: ' + select_time + 'ms, download: ' + download_time + 'ms, decode: ' + decode_time + 'ms, total: ' + total_time + 'ms');
-                            }
-                        }
-                    });
-                    
-                    // get entry by field values
-                    //let entry = cdb.getRow({'Time Step': 87, 'Camera Position': 'center', 'Streamlines': true, 'Cell Color': 'force', 'Transparent': false});
-                    //console.log('Entry by field values:', cinemaods_url + '/' + entry.FILE);
-                    
                     // build gui
                     buildGui();
                 }).catch((err) => {
@@ -130,12 +148,12 @@
         }
         
         function buildGui() {
-            let i, j;
+            let i, j, k;
             let gui_height = 132;
             let gui_width = 1000;
             for (i = 0; i < cdb.fields.length; i++) {
                 if (cdb.fields[i].type == 'RADIO') {
-                    gui_height += 72 + (64 * cdb.fields[i].options.length);
+                    gui_height += 72 + (64 * Math.ceil(cdb.fields[i].options.length / 2));
                 }
                 else if (cdb.fields[i].type == 'CHECKBOX') {
                     gui_height += 72 + 64;
@@ -167,6 +185,14 @@
             header.textHorizontalAlignment = BABYLON.GUI.Control.HORIZONTAL_ALIGNMENT_CENTER;
             header.fontSize = '96px';
             panel.addControl(header);
+            
+            // play-pause and exit button panel
+            let button_panel = new BABYLON.GUI.StackPanel();
+            button_panel.width = '960px';
+            button_panel.height = '96px';
+            button_panel.isVertical = false;
+            button_panel.horizontalAlignment = BABYLON.GUI.Control.HORIZONTAL_ALIGNMENT_CENTER;
+            button_panel.verticalAlignment = BABYLON.GUI.Control.VERTICAL_ALIGNMENT_CENTER;
 
             for (i = 0; i < cdb.fields.length; i++) {
                 if (cdb.fields[i].type == 'RADIO'){
@@ -181,7 +207,7 @@
 
                     gui_elements[cdb.fields[i].name] = {};
 
-                    for (j = 0; j < cdb.fields[i].options.length; j++) {
+                    for (j = 0; j < cdb.fields[i].options.length; j+=2) {
                         let radio_panel = new BABYLON.GUI.StackPanel();
                         radio_panel.width = '960px';
                         radio_panel.height = '64px';
@@ -189,32 +215,49 @@
                         radio_panel.horizontalAlignment = BABYLON.GUI.Control.HORIZONTAL_ALIGNMENT_CENTER;
                         radio_panel.verticalAlignment = BABYLON.GUI.Control.VERTICAL_ALIGNMENT_CENTER;
 
-                        let radio_spacer = new BABYLON.GUI.TextBlock();
-                        radio_spacer.text = ' ';
-                        radio_spacer.width = '50px';
-                        radio_spacer.color = '#000000';
-                        radio_spacer.textHorizontalAlignment = BABYLON.GUI.Control.HORIZONTAL_ALIGNMENT_LEFT;
-                        radio_spacer.fontSize = '48px';
-                        radio_panel.addControl(radio_spacer);
+                        for (k = 0; k < 2; k++) {
+                            if (j + k < cdb.fields[i].options.length) {
+                                let radio_spacer = new BABYLON.GUI.TextBlock();
+                                radio_spacer.text = ' ';
+                                radio_spacer.width = '50px';
+                                radio_spacer.color = '#000000';
+                                radio_spacer.textHorizontalAlignment = BABYLON.GUI.Control.HORIZONTAL_ALIGNMENT_LEFT;
+                                radio_spacer.fontSize = '48px';
+                                radio_panel.addControl(radio_spacer);
 
-                        let radio_button = new BABYLON.GUI.RadioButton();
-                        radio_button.width = '50px';
-                        radio_button.height = '50px';
-                        radio_button.isChecked = (j == 0);
-                        radio_button.checkSizeRatio = 0.7;
-                        radio_button.group = cdb.fields[i].name;
-                        radio_button.color = '#28923D';
-                        radio_button.onIsCheckedChangedObservable.add(guiUpdated);
-                        radio_panel.addControl(radio_button);
-                        gui_elements[cdb.fields[i].name][cdb.fields[i].options[j]] = radio_button;
+                                let radio_button = new BABYLON.GUI.RadioButton();
+                                radio_button.width = '50px';
+                                radio_button.height = '50px';
+                                radio_button.isChecked = ((j + k) == 0);
+                                radio_button.checkSizeRatio = 0.7;
+                                radio_button.group = cdb.fields[i].name;
+                                radio_button.color = '#28923D';
+                                let group_name = cdb.fields[i].name;
+                                radio_button.onIsCheckedChangedObservable.add((value) => {
+                                    let key;
+                                    let num_checked = 0;
+                                    for (key in gui_elements[group_name]) {
+                                        if (gui_elements[group_name][key].isChecked) {
+                                            num_checked++;
+                                        }
+                                    }
+                                    if (num_checked === 1) {
+                                        guiUpdated(value);
+                                    }
+                                });
+                                radio_panel.addControl(radio_button);
+                                gui_elements[cdb.fields[i].name][cdb.fields[i].options[j + k]] = radio_button;
 
-                        let radio_label = new BABYLON.GUI.TextBlock();
-                        radio_label.text = ' ' + cdb.fields[i].options[j];
-                        radio_label.width = '200px';
-                        radio_label.color = '#000000';
-                        radio_label.textHorizontalAlignment = BABYLON.GUI.Control.HORIZONTAL_ALIGNMENT_LEFT;
-                        radio_label.fontSize = '48px';
-                        radio_panel.addControl(radio_label);
+                                let radio_label = new BABYLON.GUI.TextBlock();
+                                radio_label.text = ' ' + cdb.fields[i].options[j + k];
+                                radio_label.width = '200px';
+                                radio_label.color = '#000000';
+                                radio_label.textHorizontalAlignment = BABYLON.GUI.Control.HORIZONTAL_ALIGNMENT_LEFT;
+                                radio_label.fontSize = '48px';
+                                radio_panel.addControl(radio_label);
+                            }
+                        }
+                        
                         panel.addControl(radio_panel);
                     }
                 }
@@ -289,7 +332,8 @@
                     chosen_slider.minimum = cdb.fields[i].start;
                     chosen_slider.maximum =  cdb.fields[i].end;
                     chosen_slider.step = 1;
-                    chosen_slider.onValueChangedObservable.add(guiUpdated);
+                    //chosen_slider.onValueChangedObservable.add(guiUpdated);
+                    chosen_slider.onPointerUpObservable.add(guiUpdated);
                     slider_panel.addControl(chosen_slider);
 
                     gui_elements[cdb.fields[i].name] = chosen_slider;
@@ -306,17 +350,26 @@
                     });
                     panel.addControl(slider_panel);
                 }
-                else {
-                    // don't do anything for the files
+                else if (cdb.fields[i].type === 'FILE' && cdb.fields[i].name === 'FILEvideo') {
+                    play_button = BABYLON.GUI.Button.CreateSimpleButton('play_pause', 'Play');
+                    play_button.width = '300px';
+                    play_button.height = '72px';
+                    play_button.color = '#FFFFFF';
+                    play_button.background = '#28923D';
+                    play_button.fontSize = '48px';
+                    play_button.onPointerClickObservable.add(playPauseVideo);
+                    button_panel.addControl(play_button);
+                    
+                    let button_spacer = new BABYLON.GUI.TextBlock();
+                    button_spacer.text = ' ';
+                    button_spacer.width = '50px';
+                    button_spacer.color = '#000000';
+                    button_spacer.textHorizontalAlignment = BABYLON.GUI.Control.HORIZONTAL_ALIGNMENT_LEFT;
+                    button_spacer.fontSize = '48px';
+                    button_panel.addControl(button_spacer);
                 }
             }
             //leave vr
-            let button_panel = new BABYLON.GUI.StackPanel();
-            button_panel.width = '960px';
-            button_panel.height = '96px';
-            button_panel.isVertical = false;
-            button_panel.horizontalAlignment = BABYLON.GUI.Control.HORIZONTAL_ALIGNMENT_CENTER;
-            button_panel.verticalAlignment = BABYLON.GUI.Control.VERTICAL_ALIGNMENT_CENTER;
             let leave_vr_button = BABYLON.GUI.Button.CreateSimpleButton('leave_vr', 'Exit VR');
             leave_vr_button.width = '300px';
             leave_vr_button.height = '72px';
@@ -326,12 +379,19 @@
             leave_vr_button.onPointerClickObservable.add(exitVr);
             button_panel.addControl(leave_vr_button);
             panel.addControl(button_panel);
+            
+            // load first image
+            guiUpdated('CREATE_VIDEO_TEXTURE');
         }
         
         function startRenderLoop(engine) {
             // register a render loop to repeatedly render the scene
             engine.runRenderLoop(() => {
                 sphere.position = scene.activeCamera.position;
+                if (gui !== null) {
+                    gui.position = scene.activeCamera.position.add(new BABYLON.Vector3(0.7, -0.15, 1.0))
+                    gui.lookAt(gui.position.multiply(new BABYLON.Vector3(2, 2, 2)).subtract(scene.activeCamera.position));
+                }
                 scene.render();
             });
 
@@ -342,32 +402,81 @@
         }
         
         function guiUpdated(value) {
-            console.log(gui_elements);
-
-            let field;
-            let key;
-            let row_values = {};
-            for (field in gui_elements){
-                let field_index = getFieldIndex(cdb.fields, field);
-                if (cdb.fields[field_index].type == "CHECK"){
-                    //console.log(field, gui_elements[field].isChecked);
-                    row_values[field] = gui_elements[field].isChecked;
-                } else if (cdb.fields[field_index].type == "RANGE"){
-                    row_values[field] = gui_elements[field].value;
-                } else if (cdb.fields[field_index].type == "RADIO"){
-                    for (key in gui_elements[field]){
-                        console.log(key, gui_elements[field][key].isChecked);
-                        if (gui_elements[field][key].isChecked){
-                            row_values[field] = key;
-                        }
+            let time_start = Date.now();
+            let entry = getCdbRowFromGuiSelections();
+            let select_time = Date.now() - time_start;
+            dome_textures[backbuffer].updateURL(cinemaods_url + '/' + entry.FILE, null, () => {
+                let decode_end = Date.now();
+                let resource_list = window.performance.getEntriesByType('resource');
+                let full_img_url = cinemaods_url + '/' + entry.FILE;
+                if (full_img_url.substring(0, 4) !== 'http') {
+                    full_img_url = window.location.href + (window.location.href[window.location.href.length - 1] === '/' ? '' : '/') + full_img_url;
+                }
+                for (let i = 0; i < resource_list.length; i++) {
+                    if (resource_list[i].initiatorType == 'img' && resource_list[i].name === full_img_url) {
+                        let total_time = decode_end - time_start;
+                        let download_time = Math.round(resource_list[i].responseEnd - resource_list[i].fetchStart);
+                        let decode_time = total_time - select_time - download_time;
+                        console.log('select: ' + select_time + 'ms, download: ' + download_time + 'ms, decode: ' + decode_time + 'ms, total: ' + total_time + 'ms');
                     }
                 }
+                
+                photodomes[backbuffer].setEnabled(true);
+                photodomes[frontbuffer].setEnabled(false);
+                backbuffer = 1 - backbuffer;
+                frontbuffer = 1 - frontbuffer;
+            });
+            
+            if (videodome !== null && !videodome.videoTexture.video.paused) {
+                play_button.textBlock.text = 'Play';
+                
+                videodome.videoTexture.video.pause();
+                let time_step = Math.round(videodome.videoTexture.video.currentTime * 24)
+                gui_elements['Time Step'].value = time_step;
             }
-
-            console.log(row_values);
-            let row = cdb.getRow(row_values);
-            console.log(row);
-            dome_texture.updateURL(cinemaods_url + '/' + row.FILE);
+            
+            if (value === 'CREATE_VIDEO_TEXTURE' && entry.hasOwnProperty('FILEvideo')) {
+                videodome = new BABYLON.VideoDome(
+                    'ods_viddome',
+                    cinemaods_url + '/' + entry.FILEvideo,
+                    {
+                        resolution: 32,
+                        size: 501,
+                        autoPlay: false,
+                        loop: false
+                    },
+                    scene
+                );
+                videodome.videoMode = BABYLON.VideoDome.MODE_TOPBOTTOM;
+                videodome.videoTexture.video.addEventListener('ended', (event) => {
+                    playPauseVideo();
+                }, false);
+                videodome.addRotation(0, Math.PI / 2, 0);
+            }
+            else if (entry.hasOwnProperty('FILEvideo') && value !== 'PAUSE_VIDEO_TEXTURE') {
+                videodome.videoTexture.updateURL(cinemaods_url + '/' + entry.FILEvideo);
+            }
+        }
+        function playPauseVideo() {
+            // TODO: don't hardcode framerate (24) or name of Time Step column
+            if (play_button.textBlock.text === 'Play') {
+                play_button.textBlock.text = 'Pause';
+                
+                let entry = getCdbRowFromGuiSelections();
+                videodome.videoTexture.video.addEventListener('canplaythrough', (event) => {
+                    photodomes[frontbuffer].setEnabled(false);
+                    videodome.videoTexture.video.play();
+                }, {once: true});
+                videodome.videoTexture.video.currentTime = entry['Time Step'] / 24;
+            }
+            else {
+                play_button.textBlock.text = 'Play';
+                
+                videodome.videoTexture.video.pause();
+                let time_step = Math.round(videodome.videoTexture.video.currentTime * 24)
+                gui_elements['Time Step'].value = time_step;
+                guiUpdated('PAUSE_VIDEO_TEXTURE');
+            }
         }
         
         function getFieldIndex(field_arr, field_name){
@@ -379,11 +488,88 @@
             return -1;
         }
 
+        function getCdbRowFromGuiSelections() {
+            let field;
+            let key;
+            let row_values = {};
+            for (field in gui_elements){
+                let field_index = getFieldIndex(cdb.fields, field);
+                if (cdb.fields[field_index].type === 'RADIO') {
+                    for (key in gui_elements[field]) {
+                        if (gui_elements[field][key].isChecked) {
+                            row_values[field] = key;
+                        }
+                    }
+                }
+                else if (cdb.fields[field_index].type === 'CHECK') {
+                    row_values[field] = gui_elements[field].isChecked;
+                }
+                else if (cdb.fields[field_index].type === 'RANGE') {
+                    row_values[field] = gui_elements[field].value;
+                }
+            }
+
+            return cdb.getRow(row_values);
+        }
+
         function exitVr() {
             xr_control.baseExperience.exitXRAsync().then(() => {
                 // nothing
             });
         }
+
+        function runTests() {
+            let camera_location = ['center', 'path1', 'path2']
+            let streamlines = [false, true]
+            let cell_color = ['force', 'solid']
+            let transparent = [false, true]
+            let ts = 4;
+            console.log(',select,download,decode,total');
+            for (let i = 0; i < 2; i++) {
+                for (let c = 0; c  < camera_location.length; c++) {
+                    let cam = camera_location[c];
+                    for (let s = 0; s < streamlines.length; s++) {
+                        let stream = streamlines[s];
+                        for (let r = 0; r < cell_color.length; r ++) {
+                            let color = cell_color[r];
+                            for (let t = 0; t < transparent.length; t++) {
+                                let trans = transparent[t];
+                                let time = ts;
+                                setTimeout(() => {
+                                    let row_values = {'Time Step': time, 'Camera Position': cam, 'Streamlines': stream, 'Cell Color': color, 'Transparent': trans};
+                                    let time_start = Date.now();
+                                    let entry = cdb.getRow(row_values);
+                                    let select_time = Date.now() - time_start;
+                                    dome_textures[backbuffer].updateURL(cinemaods_url + '/' + entry.FILE, null, () => {
+                                        let decode_end = Date.now();
+                                        let resource_list = window.performance.getEntriesByType('resource');
+                                        let full_img_url = cinemaods_url + '/' + entry.FILE;
+                                        if (full_img_url.substring(0, 4) !== 'http') {
+                                            full_img_url = window.location.href + (window.location.href[window.location.href.length - 1] === '/' ? '' : '/') + full_img_url;
+                                        }
+                                        for (let i = 0; i < resource_list.length; i++) {
+                                            if (resource_list[i].initiatorType == 'img' && resource_list[i].name === full_img_url) {
+                                                let total_time = decode_end - time_start;
+                                                let download_time = Math.round(resource_list[i].responseEnd - resource_list[i].fetchStart);
+                                                let decode_time = total_time - select_time - download_time;
+                                                console.log(',' + select_time + ',' + download_time + ',' + decode_time + ',' + total_time);
+                                            }
+                                        }
+                                        
+                                        photodomes[backbuffer].setEnabled(true);
+                                        photodomes[frontbuffer].setEnabled(false);
+                                        backbuffer = 1 - backbuffer;
+                                        frontbuffer = 1 - frontbuffer;
+                                    });
+                                }, (ts + 1) * 200);
+                                ts += 14;
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
     </script>
 </head>
 <body onload="init()">
