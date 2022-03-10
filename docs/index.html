@@ -14,6 +14,7 @@
         let xr_control;
         let cdb;
         let scene;
+        let photodomes;
         let videodome;
         let dome_textures;
         let frontbuffer;
@@ -98,7 +99,13 @@
                                     button_a.onButtonStateChangedObservable.add(() => {
                                         if (button_a.changes.pressed && button_a.pressed) {
                                             console.log('A button pressed!');
-                                            gui.isVisible = false;
+                                            if (gui.isVisible){
+                                                //if already visible, then hide
+                                                gui.isVisible = false;
+                                            } else {
+                                                //reappear if invisible
+                                                gui.isVisible = true;
+                                            }
                                             //runTests();
                                         }
                                     });
@@ -457,6 +464,7 @@
                 videodome.videoTexture.updateURL(cinemaods_url + '/' + entry.FILEvideo);
             }
         }
+        
         function playPauseVideo() {
             // TODO: don't hardcode framerate (24) or name of Time Step column
             if (play_button.textBlock.text === 'Play') {
@@ -477,6 +485,39 @@
                 gui_elements['Time Step'].value = time_step;
                 guiUpdated('PAUSE_VIDEO_TEXTURE');
             }
+        }
+        
+        function getFieldIndex(field_arr, field_name){
+            for (let i = 0; i < field_arr.length; i++){
+                if (field_arr[i].name == field_name){
+                    return i;
+                }
+            }
+            return -1;
+        }
+        
+        function getCdbRowFromGuiSelections() {
+            let field;
+            let key;
+            let row_values = {};
+            for (field in gui_elements){
+                let field_index = getFieldIndex(cdb.fields, field);
+                if (cdb.fields[field_index].type === 'RADIO') {
+                    for (key in gui_elements[field]) {
+                        if (gui_elements[field][key].isChecked) {
+                            row_values[field] = key;
+                        }
+                    }
+                }
+                else if (cdb.fields[field_index].type === 'CHECK') {
+                    row_values[field] = gui_elements[field].isChecked;
+                }
+                else if (cdb.fields[field_index].type === 'RANGE') {
+                    row_values[field] = gui_elements[field].value;
+                }
+            }
+
+            return cdb.getRow(row_values);
         }
         
         function getFieldIndex(field_arr, field_name){
@@ -517,7 +558,7 @@
                 // nothing
             });
         }
-
+        
         function runTests() {
             let camera_location = ['center', 'path1', 'path2']
             let streamlines = [false, true]
@@ -569,7 +610,6 @@
                 }
             }
         }
-
     </script>
 </head>
 <body onload="init()">
