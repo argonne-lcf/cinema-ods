@@ -98,7 +98,13 @@
                                     button_a.onButtonStateChangedObservable.add(() => {
                                         if (button_a.changes.pressed && button_a.pressed) {
                                             console.log('A button pressed!');
-                                            gui.isVisible = false;
+                                            if (gui.isVisible){
+                                                //if already visible, then hide
+                                                gui.isVisible = false;
+                                            } else {
+                                                //reappear if invisible
+                                                gui.isVisible = true;
+                                            }
                                             //runTests();
                                         }
                                     });
