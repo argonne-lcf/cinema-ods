@@ -90,12 +90,12 @@
                             buttons = motion_controller.getAllComponentsOfType('button');
                             if (buttons.length) {
                                 button_a = null;
-                                right_trigger = null;
+                                button_b = null;
                                 for (let i = 0; i < buttons.length; i++) {
                                     if (buttons[i].id === 'a-button') {
                                         button_a = buttons[i];
-                                    } else if (buttons[i].id === 'xr-standard-trigger'){
-                                        right_trigger = buttons[i];
+                                    } else if (buttons[i].id === 'b-button'){
+                                        button_b = buttons[i];
                                     }
                                 }
                                 if (button_a !== null) {
@@ -114,21 +114,24 @@
                                     });
                                 }
 
-                                if (right_trigger !== null){
-                                    triggerComponent.onButtonStateChangedObservable.add(() => {
-                                    if (triggerComponent.changes.pressed && triggerComponent.pressed) {
-                                        if (gui.isVisible){
-                                            //if already visible, then hide
-                                            gui.isVisible = false;
-                                        } else {
-                                            //reappear if invisible
-                                            gui.isVisible = true;
+                                if (button_b !== null){
+                                    button_b.onButtonStateChangedObservable.add(() => {
+                                        if (button_b.changes.pressed && button_b.pressed) {
+                                            console.log('B button pressed!');
+                                            if (gui.isVisible){
+                                                //if already visible, then hide
+                                                gui.isVisible = false;
+                                            } else {
+                                                //reappear if invisible
+                                                gui.isVisible = true;
+                                            }
+                                            //runTests();
                                         }
                                         vector.x = pickResult.pickedPoint.x;
                                         vector.y = pickResult.pickedPoint.y;
                                         vector.z = pickResult.pickedPoint.z;
                                         console.log('right mouse click: ' + vector.x + ',' + vector.y + ',' + vector.z );
-                                    }
+                                    
                                     runTests();
                                     });
                                 }     
