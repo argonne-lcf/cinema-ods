@@ -90,9 +90,12 @@
                             buttons = motion_controller.getAllComponentsOfType('button');
                             if (buttons.length) {
                                 button_a = null;
+                                right_trigger = null;
                                 for (let i = 0; i < buttons.length; i++) {
                                     if (buttons[i].id === 'a-button') {
                                         button_a = buttons[i];
+                                    } else if (buttons[i].id === 'xr-standard-trigger'){
+                                        right_trigger = buttons[i];
                                     }
                                 }
                                 if (button_a !== null) {
@@ -110,10 +113,61 @@
                                         }
                                     });
                                 }
+
+                                if (right_trigger !== null){
+                                    triggerComponent.onButtonStateChangedObservable.add(() => {
+                                    if (triggerComponent.changes.pressed && triggerComponent.pressed) {
+                                        if (gui.isVisible){
+                                            //if already visible, then hide
+                                            gui.isVisible = false;
+                                        } else {
+                                            //reappear if invisible
+                                            gui.isVisible = true;
+                                        }
+                                        vector.x = pickResult.pickedPoint.x;
+                                        vector.y = pickResult.pickedPoint.y;
+                                        vector.z = pickResult.pickedPoint.z;
+                                        console.log('right mouse click: ' + vector.x + ',' + vector.y + ',' + vector.z );
+                                    }
+                                    runTests();
+                                    });
+                                }     
                             }
                         }
                     });
                 });
+
+                /*
+
+                                const ray = /*inputSource ? tmpRay :* /controller.pickInfo.ray;
+                                ray.direction.scaleInPlace(0.2);
+
+                                if (right_trigger !== null) {
+                                    right_trigger.onButtonStateChangedObservable.add(() => {
+                                        if (right_trigger.changes.pressed && right_trigger.pressed) {
+                                            console.log('trigger pressed!');
+                                            //runTests();
+                                        }
+                                    });
+                                }
+                                /*
+                scene.onPointerObservable.add((event) => {
+                    if (event.type === BABYLON.PointerEventTypes.POINTERPICK) {
+                        const inputSource = xr.pointerSelection.getXRControllerByPointerId(event.event.pointerId);
+                        if (!inputSource || (inputSource && inputSource.motionController.handness === 'right')) {
+                            if (inputSource) {
+                                inputSource.getWorldPointerRayToRef(tmpRay);
+                            }
+                            const ray = /*inputSource ? tmpRay :* /event.pickInfo.ray; /*
+                            ray.direction.scaleInPlace(0.2);
+                            bullet.position.copyFrom(ray.origin);
+                            bullet.position.addInPlace(ray.direction);
+                            bullet.physicsImpostor = new BABYLON.PhysicsImpostor(bullet, BABYLON.PhysicsImpostor.SphereImpostor, { mass: 3 });
+                            bullet.physicsImpostor.setLinearVelocity(ray.direction.scale(400));
+                        }
+                    }
+                })  */
+                //xr_control.input 
 
                 startRenderLoop(engine);
             })
