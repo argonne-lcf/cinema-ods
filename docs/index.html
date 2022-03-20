@@ -102,6 +102,7 @@
                                     button_a.onButtonStateChangedObservable.add(() => {
                                         if (button_a.changes.pressed && button_a.pressed) {
                                             console.log('A button pressed!');
+                                            motion_controller
                                             if (gui.isVisible){
                                                 //if already visible, then hide
                                                 gui.isVisible = false;
@@ -112,24 +113,41 @@
                                             //runTests();
                                         }
                                     });
-                                } else if (button_b !== null){
+                                }
+
+                                if (button_b !== null){
                                     button_b.onButtonStateChangedObservable.add(() => {
                                         if (button_b.changes.pressed && button_b.pressed) {
                                             console.log('B button pressed!');
+
+                                            let tmpRay = new BABYLON.Ray();
+                                            tmpRay.origin = new BABYLON.Vector3();
+                                            tmpRay.direction = new BABYLON.Vector3();
+
+                                            controller.getWorldPointerRayToRef(tmpRay);
+                                            tmpRay.direction.scaleInPlace(1);
+
+                                            let cube = new BABYLON.MeshBuilder.CreateBox("box", {size: 0.2}, scene);
+                                            cube.position = tmpRay.origin + tmpRay.direction;
+
+                                            /*
+                                            can possibly replace 131 with this: 
+
+                                            cube.position.copyFrom(tmpRay.origin);
+                                            cube.position.addInPlace(tmpRay.direction);
+                                            */
+
                                             if (gui.isVisible){
                                                 //if already visible, then hide
                                                 gui.isVisible = false;
                                             } else {
                                                 //reappear if invisible
                                                 gui.isVisible = true;
+                                                //move gui too
+                                                //gui.position = tmpRay.origin + tmpRay.direction;
                                             }
                                             //runTests();
                                         }
-                                        /*
-                                        vector.x = pickResult.pickedPoint.x;
-                                        vector.y = pickResult.pickedPoint.y;
-                                        vector.z = pickResult.pickedPoint.z;
-                                        console.log('right mouse click: ' + vector.x + ',' + vector.y + ',' + vector.z ); */
                                     });
                                 }    
                             }
@@ -153,6 +171,9 @@
                                 /*
                 scene.onPointerObservable.add((event) => {
                     if (event.type === BABYLON.PointerEventTypes.POINTERPICK) {
+
+                        controller.onMotionControllerInitObservable.add((motion_controller)
+
                         const inputSource = xr.pointerSelection.getXRControllerByPointerId(event.event.pointerId);
                         if (!inputSource || (inputSource && inputSource.motionController.handness === 'right')) {
                             if (inputSource) {
@@ -450,7 +471,7 @@
             engine.runRenderLoop(() => {
                 sphere.position = scene.activeCamera.position;
                 if (gui !== null) {
-                    gui.position = scene.activeCamera.position.add(new BABYLON.Vector3(0.7, -0.15, 1.0))
+                    //gui.position = scene.activeCamera.position.add(new BABYLON.Vector3(0.7, -0.15, 1.0))
                     gui.lookAt(gui.position.multiply(new BABYLON.Vector3(2, 2, 2)).subtract(scene.activeCamera.position));
                 }
                 scene.render();
