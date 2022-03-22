@@ -102,25 +102,6 @@
                                     button_a.onButtonStateChangedObservable.add(() => {
                                         if (button_a.changes.pressed && button_a.pressed) {
                                             console.log('A button pressed!');
-                                            /*
-                                            //motion_controller
-
-                                            let tmpRay = new BABYLON.Ray();
-                                            tmpRay.origin = new BABYLON.Vector3();
-                                            tmpRay.direction = new BABYLON.Vector3();
-
-                                            controller.getWorldPointerRayToRef(tmpRay);
-                                            tmpRay.direction.scaleInPlace(1);
-
-                                            let cube = new BABYLON.MeshBuilder.CreateBox("box", {size: 0.2}, scene);
-                                            cube.position = tmpRay.origin + tmpRay.direction;
-
-                                            /*
-                                            can possibly replace 131 with this: 
-
-                                            cube.position.copyFrom(tmpRay.origin);
-                                            cube.position.addInPlace(tmpRay.direction);
-                                            */
 
                                             if (gui.isVisible){
                                                 //if already visible, then hide
@@ -150,6 +131,24 @@
                                     button_b.onButtonStateChangedObservable.add(() => {
                                         if (button_b.changes.pressed && button_b.pressed) {
                                             console.log('B button pressed!');
+
+                                            let tmpRay = new BABYLON.Ray();
+                                            tmpRay.origin = new BABYLON.Vector3();
+                                            tmpRay.direction = new BABYLON.Vector3();
+
+                                            controller.getWorldPointerRayToRef(tmpRay);
+                                            tmpRay.direction.scaleInPlace(1);
+
+                                            let cube = new BABYLON.MeshBuilder.CreateBox("box", {size: 0.2}, scene);
+                                            cube.position = tmpRay.origin + tmpRay.direction;
+
+                                            /*
+                                            can possibly replace 131 with this: 
+
+                                            cube.position.copyFrom(tmpRay.origin);
+                                            cube.position.addInPlace(tmpRay.direction);
+                                            /*
+                                            //motion_controller
 
                                             let tmpRay = new BABYLON.Ray();
                                             tmpRay.origin = new BABYLON.Vector3();
