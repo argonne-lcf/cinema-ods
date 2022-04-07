@@ -110,7 +110,18 @@
                                                 //reappear if invisible
                                                 gui.isVisible = true;
                                                 //move gui too
+                                                gui.isVisible = true;
+                                                //move gui too
                                                 //gui.position = tmpRay.origin + tmpRay.direction;
+                                                let tmpRay = new BABYLON.Ray();
+                                                //let tmpRay = new Ray(button_b.pointer.absolutePosition, button_b.pointer.forward, 1.0);
+                                                tmpRay.origin = new BABYLON.Vector3();
+                                                tmpRay.direction = new BABYLON.Vector3();
+
+                                                controller.getWorldPointerRayToRef(tmpRay);
+                                                tmpRay.direction.scaleInPlace(1.23);
+
+                                                gui.position = tmpRay.origin.add(tmpRay.direction);
                                             }
                                             //runTests();
                                         }
