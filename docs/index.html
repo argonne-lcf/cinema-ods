@@ -84,26 +84,78 @@
             .then((xr_helper) => {
                 xr_control = xr_helper;
                 xr_control.teleportation.detach();
-                
+  
                 xr_control.input.onControllerAddedObservable.add((controller) => {
                     controller.onMotionControllerInitObservable.add((motion_controller) => {
                         if (motion_controller.handness === 'right') {
                             buttons = motion_controller.getAllComponentsOfType('button');
                             if (buttons.length) {
                                 button_a = null;
+                                button_b = null;
                                 for (let i = 0; i < buttons.length; i++) {
                                     if (buttons[i].id === 'a-button') {
                                         button_a = buttons[i];
+                                    } else if (buttons[i].id === 'b-button'){
+                                        button_b = buttons[i];
                                     }
                                 }
                                 if (button_a !== null) {
                                     button_a.onButtonStateChangedObservable.add(() => {
                                         if (button_a.changes.pressed && button_a.pressed) {
                                             console.log('A button pressed!');
-                                            runTests();
+
+                                            if (gui.isVisible){
+                                                //if already visible, then hide
+                                                gui.isVisible = false;
+                                            } else {
+                                                //reappear if invisible
+                                                gui.isVisible = true;
+                                                //move gui too
+                                                gui.isVisible = true;
+                                                //move gui too
+                                                //gui.position = tmpRay.origin + tmpRay.direction;
+                                                let tmpRay = new BABYLON.Ray();
+                                                //let tmpRay = new Ray(button_b.pointer.absolutePosition, button_b.pointer.forward, 1.0);
+                                                tmpRay.origin = new BABYLON.Vector3();
+                                                tmpRay.direction = new BABYLON.Vector3();
+
+                                                controller.getWorldPointerRayToRef(tmpRay);
+                                                tmpRay.direction.scaleInPlace(1.23);
+
+                                                gui.position = tmpRay.origin.add(tmpRay.direction);
+                                            }
+                                            //runTests();
                                         }
                                     });
                                 }
+
+                                if (button_b !== null){
+                                    button_b.onButtonStateChangedObservable.add(() => {
+                                        if (button_b.changes.pressed && button_b.pressed) {
+                                            console.log('B button pressed!');
+                                            //move the gui to where the controller is pointing
+
+                                            let tmpRay = new BABYLON.Ray();
+                                            //let tmpRay = new Ray(button_b.pointer.absolutePosition, button_b.pointer.forward, 1.0);
+                                            tmpRay.origin = new BABYLON.Vector3();
+                                            tmpRay.direction = new BABYLON.Vector3();
+
+                                            controller.getWorldPointerRayToRef(tmpRay);
+                                            tmpRay.direction.scaleInPlace(1.23);
+
+                                            //let cube = new BABYLON.MeshBuilder.CreateBox("box", {size: 0.2}, scene);
+                                            //cube.position = tmpRay.origin.add(tmpRay.direction);
+                                            gui.position = tmpRay.origin.add(tmpRay.direction);
+                                            
+                                            /*
+                                            can possibly replace 131 with this: 
+
+                                            cube.position.copyFrom(tmpRay.origin);
+                                            cube.position.addInPlace(tmpRay.direction);
+                                            //runTests(); */
+                                        }
+                                    });
+                                }    
                             }
                         }
                     });
@@ -126,6 +178,44 @@
             gui = null;
             gui_elements = {};
             play_button = null;
+
+            let vector = new BABYLON.Vector3();
+
+            scene.onPointerObservable.add((pointerInfo) => {
+                    switch (pointerInfo.type) {
+                        case BABYLON.PointerEventTypes.POINTERMOVE:
+                            console.log("POINTER MOVE");
+                            break;
+                        case BABYLON.PointerEventTypes.POINTERWHEEL:
+                            console.log("POINTER WHEEL");
+                            break;
+                        case BABYLON.PointerEventTypes.POINTERPICK:
+                            if (pointerInfo.event.button == 2){
+                                console.log(pointerInfo.event.button);
+                                console.log("POINTER PICK");
+                                let pickResult = scene.pick(scene.pointerX, scene.pointerY);
+                                console.log(pickResult);
+                                vector.x = pickResult.pickedPoint.x;
+                                vector.y = pickResult.pickedPoint.y;
+                                vector.z = pickResult.pickedPoint.z;
+                                console.log(vector);
+                                let gui_direction = vector.subtract(camera.position);
+                                gui_direction.normalize();
+                                console.log(gui_direction);
+                                gui_direction.scaleInPlace(1.23);
+                                console.log(gui_direction);
+                                gui.position = camera.position.add(gui_direction);
+                                break;
+                            }
+                        case BABYLON.PointerEventTypes.POINTERTAP:
+                            console.log("POINTER TAP"); 
+                            break;
+                        case BABYLON.PointerEventTypes.POINTERDOUBLETAP:
+                            console.log("POINTER DOUBLE-TAP");
+                            break;
+                    }
+                });
+
         }
         
         function selectCinemaDatabase() {
@@ -391,7 +481,7 @@
             engine.runRenderLoop(() => {
                 sphere.position = scene.activeCamera.position;
                 if (gui !== null) {
-                    gui.position = scene.activeCamera.position.add(new BABYLON.Vector3(0.7, -0.15, 1.0))
+                    //gui.position = scene.activeCamera.position.add(new BABYLON.Vector3(0.7, -0.15, 1.0))
                     gui.lookAt(gui.position.multiply(new BABYLON.Vector3(2, 2, 2)).subtract(scene.activeCamera.position));
                 }
                 scene.render();
