@@ -19,6 +19,7 @@ def main():
     parser.add_argument('-cp', '--camera-position', type=str, default='(0.0,0.0,1.65)', help='camera position (x,y,z)')
     parser.add_argument('-cd', '--camera-direction', type=str, default='(90,0,90)', help='camera direction in degrees (x,y,z)')
     parser.add_argument('-rs', '--render-styles',type=str, default='atoms', help='list of render styles (atoms,atomsbonds,atoms-reflection,atomsbonds-reflection) or all')
+    parser.add_argument('-b', '--bonds', action='store_true', default=False, help='show bonds between atoms') 
     parser.add_argument('-o', '--output', type=str, default='output.jpg', help='filename to save rendered output')
 
     args = parser.parse_args(sys.argv[sys.argv.index("--") + 1:])
@@ -144,6 +145,37 @@ def main():
         icoSphere(3, 1.25)
         
     ]
+    base_bond = cylinder(8, 0.2, 1.0)
+    # BEGIN TEST
+    bond_mesh = bpy.data.meshes.new('bond')
+    bond = bpy.data.objects.new('bond', bond_mesh)
+    bpy.context.collection.objects.link(bond)
+    test_bonds = [(mathutils.Vector((2, 3, 1)), mathutils.Vector((4, 4, 3))),
+                  (mathutils.Vector((-1, 0, -1)), mathutils.Vector((-3, -1, 1)))]
+    mat3_scale = mathutils.Matrix.Identity(3)
+    bonds_mesh = {'vertices': [], 'faces': []}
+    for b in test_bonds:
+        direction = b[1] - b[0]
+        mat3_scale[2][2] = direction.length
+        mat3_rotate = direction.to_track_quat('Z', 'Y').to_matrix()
+        verts = [mat3_rotate @ mat3_scale @ v for v in base_bond['vertices']]
+        appendModelToMesh(bonds_mesh, {'vertices': verts, 'faces': base_bond['faces']}, b[0])
+    
+    bond_mesh.from_pydata(bonds_mesh['vertices'], [], bonds_mesh['faces'])
+    for poly in bond.data.polygons:
+        poly.use_smooth = True
+    #direction = mathutils.Vector((2, 1, 2))
+    #bond.scale = (1.0, 1.0, direction.length)
+    #direction.normalize()
+    #bond.rotation_euler = direction.to_track_quat('Z', 'Y').to_euler()
+    #bond.location = (2, 3, 1)
+    
+    # Quaternion `to_matrix()` => 3x3 mat
+    # multiply by scale matrix `m = Matrix.Identity(3)` followed by `m[2][2] = direction.length`
+    
+    # END TEST
+    
+    """
     for i in range(4):
         input_filename = input_filepattern.format(i+1)
         xyz_file = open(input_filename, 'r')
@@ -171,16 +203,17 @@ def main():
             atoms.data.materials[0] = materials[i]
         else:
             atoms.data.materials.append(materials[i])
-        
-        """
-        # NURBS
-        for atom_id in range(num_atoms):
-            line = xyz_file.readline().strip().split(' ')
-            pos = (float(line[1]), float(line[2]), float(line[3]))
-            bpy.ops.surface.primitive_nurbs_surface_sphere_add(location=pos)
-            if (atom_id % 500) == 0:
-                print(f'{atom_id} / {num_atoms}')
-        """
+    """
+    
+    """
+    # NURBS
+    for atom_id in range(num_atoms):
+        line = xyz_file.readline().strip().split(' ')
+        pos = (float(line[1]), float(line[2]), float(line[3]))
+        bpy.ops.surface.primitive_nurbs_surface_sphere_add(location=pos)
+        if (atom_id % 500) == 0:
+            print(f'{atom_id} / {num_atoms}')
+    """
 
     
     # timer checkpoint - finished data loading/processing, about to start rendering
@@ -292,12 +325,35 @@ def icoSphere(subdivisions, radius):
     bm.free()
     return model
 
+def cylinder(sides, radius, height):
+    model = {'vertices': [], 'faces': []}
+    for i in range(sides):
+        theta = i / sides * 2 * math.pi
+        x = radius * math.cos(theta)
+        y = radius * math.sin(theta)
+        z = 0.0
+        model['vertices'].append(mathutils.Vector((x, y, z)))
+    for i in range(sides):
+        theta = i / sides * 2 * math.pi
+        x = radius * math.cos(theta)
+        y = radius * math.sin(theta)
+        z = height
+        model['vertices'].append(mathutils.Vector((x, y, z)))
+    for i in range(sides):
+        v0 = i
+        v1 = (i + 1) % sides
+        v2 = i + sides
+        v3 = (i + 1) % sides + sides
+        model['faces'].append([v0, v1, v2])
+        model['faces'].append([v1, v3, v2])
+    return model
+    
 
 def appendModelToMesh(mesh, model, pos):
     vert_offset = len(mesh['vertices'])
     for v in model['vertices']:
         new_vert = (v[0] + pos[0], v[1] + pos[1], v[2] + pos[2])
-        mesh['vertices'].append(new_vert)
+        mesh['vertices'].append(mathutils.Vector(new_vert))
     for f in model['faces']:
         new_face = []
         for i in f:
