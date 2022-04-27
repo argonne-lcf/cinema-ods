@@ -1,24 +1,24 @@
 import argparse
 import bpy
+import bmesh
 import math
+import mathutils
 import os
+import re
 import sys
 import time
 
 
 def main():
     # parse command line arguments
-    parser = argparse.ArgumentParser(description='Python Blender script for rednering blood flow simulation data to ODS')
-    parser.add_argument('-m', '--model-dir', type=str, default='.', help='directory where PLY models and materials are stored')
-    parser.add_argument('-r', '--rbc-plyfile', type=str, default='rbc.ply', help='name of red blood cell input PLY file')
-    parser.add_argument('-c', '--ctc-plyfile', type=str, default='ctc.ply', help='name of circulating tumor cell input PLY file')
-    parser.add_argument('-s', '--streamline-plyfile', type=str, default='', help='name of fluid flow streamlines input PLY file (blank to omit)')
+    parser = argparse.ArgumentParser(description='Python Blender script for rendering MD simulation data to ODS')
+    parser.add_argument('-i', '--input-filepattern', type=str, default='data_%d.vtk', help='pattern for names of input XYZ files')
     parser.add_argument('-w', '--resolution', type=int, default=3840, help='horizontal resolution to render image (will always have 2:1 aspect ratio)')
     parser.add_argument('-d', '--device', type=str, default='CPU', help='redner device (CPU, CUDA, OPTIX, OPENCL)')
-    parser.add_argument('-i', '--device-id', type=int, default=0, help='device id')
+    parser.add_argument('-n', '--device-num', type=int, default=0, help='device number')
     parser.add_argument('-cp', '--camera-position', type=str, default='(0.0,0.0,1.65)', help='camera position (x,y,z)')
     parser.add_argument('-cd', '--camera-direction', type=str, default='(90,0,90)', help='camera direction in degrees (x,y,z)')
-    parser.add_argument('-rs', '--render-styles',type=str, default='solid', help='list of render styles (solid,force,solid-transparent,force-transparent) or all')
+    parser.add_argument('-rs', '--render-styles',type=str, default='atoms', help='list of render styles (atoms,atomsbonds,atoms-reflection,atomsbonds-reflection) or all')
     parser.add_argument('-o', '--output', type=str, default='output.jpg', help='filename to save rendered output')
 
     args = parser.parse_args(sys.argv[sys.argv.index("--") + 1:])
@@ -38,10 +38,7 @@ def main():
             render_device = device_type
     else:
         print(f'APP> Warning: render device {args.device} not recognized, using {device_type} instead')
-    device_number = args.device_id
-    
-    # model directory
-    model_dir = os.path.realpath(args.model_dir)
+    device_number = args.device_num
     
     # camera and point light location
     cam_position = args.camera_position.strip('()').split(',')
@@ -68,8 +65,8 @@ def main():
     # change render engine to 'Cycles'
     bpy.context.scene.render.engine = 'CYCLES'
     bpy.context.scene.cycles.device = device_hw
-    bpy.context.scene.cycles.preview_samples = 64
-    bpy.context.scene.cycles.samples = 256
+    bpy.context.scene.cycles.preview_samples = 32
+    bpy.context.scene.cycles.samples = 128
     cycles_prefs = bpy.context.preferences.addons['cycles'].preferences
     try:
         cycles_prefs.compute_device_type = render_device
@@ -118,73 +115,85 @@ def main():
     bpy.context.scene.render.image_settings.views_format = 'STEREO_3D'
     bpy.context.scene.render.image_settings.stereo_3d_format.display_mode = 'TOPBOTTOM'
     
-    # set background to black
+    # set background to blue
     bpy.context.scene.render.film_transparent = True
     bpy.context.scene.use_nodes = True
     tree = bpy.context.scene.node_tree
     alpha_over = tree.nodes.new(type='CompositorNodeAlphaOver')
     link_1 = tree.links.new(tree.nodes[1].outputs[0], alpha_over.inputs[2])
     link_2 = tree.links.new(alpha_over.outputs[0], tree.nodes[0].inputs[0])
-    alpha_over.inputs[1].default_value = (0.015, 0.015, 0.015, 1.0)
+    alpha_over.inputs[1].default_value = (0.0316, 0.1768, 0.4878, 1.0)
     
-    # load materials from external file
-    mat_path = os.path.join(model_dir, 'materials.blend') + '\\Material\\'
-    mat_rbc_solid_name = 'RBC_Material_Solid'
-    mat_rbc_solid_trans_name = 'RBC_Material_Solid_Transparent'
-    mat_rbc_force_name = 'RBC_Material'
-    mat_rbc_force_trans_name = 'RBC_Material_Transparent'
-    mat_ctc_solid_name = 'CTC_Material_Solid'
-    mat_ctc_force_name = 'CTC_Material'
-    mat_streamline_name = 'Streamline_Material'
-    mat_micropost_name = 'Micropost_Material'
-    bpy.ops.wm.append(filename=mat_rbc_solid_name, directory=mat_path)
-    bpy.ops.wm.append(filename=mat_rbc_solid_trans_name, directory=mat_path)
-    bpy.ops.wm.append(filename=mat_rbc_force_name, directory=mat_path)
-    bpy.ops.wm.append(filename=mat_rbc_force_trans_name, directory=mat_path)
-    bpy.ops.wm.append(filename=mat_ctc_solid_name, directory=mat_path)
-    bpy.ops.wm.append(filename=mat_ctc_force_name, directory=mat_path)
-    bpy.ops.wm.append(filename=mat_streamline_name, directory=mat_path)
-    bpy.ops.wm.append(filename=mat_micropost_name, directory=mat_path)
-    mat_streamline = bpy.data.materials.get(mat_streamline_name)
-    mat_micropost = bpy.data.materials.get(mat_micropost_name) 
-    
-    # import PLY models
-    models = []
-    models.append({'type': 'rbc', 'filename': os.path.join(model_dir, args.rbc_plyfile)})
-    models.append({'type': 'ctc', 'filename': os.path.join(model_dir, args.ctc_plyfile)})
-    if args.streamline_plyfile != '':
-        models.append({'type': 'streamlines', 'filename': os.path.join(model_dir, args.streamline_plyfile)})
-    models.append({'type': 'micropost', 'filename': os.path.join(model_dir, 'micropost.ply')})
-    for model in models:
-        bpy.ops.import_mesh.ply(filepath=model['filename'], filter_glob="*.ply")
-        objs = bpy.context.selected_objects
-        model['objs'] = objs
-        for obj in objs:
-            if model['type'] == 'streamlines':
-                obj.data.materials.append(mat_streamline)
-            elif model['type'] == 'micropost':
-                obj.data.materials.append(mat_micropost)
-            for poly in obj.data.polygons:
-                poly.use_smooth = True
-            obj.scale = (0.05, 0.05, 0.05)
-            obj.rotation_euler = (math.radians(270.0), 0.0, math.radians(90.0))
-            obj.location = (25, -12.5, 2.5)
-    bpy.ops.mesh.primitive_plane_add(location=(0.0, 0.5, -1.25), rotation=(0.0, 0.0, 0.0))
-    plane = bpy.context.selected_objects
-    for obj in plane:
-        obj.scale = (25.5, 13.5, 1.0)
-        obj.data.materials.append(mat_micropost)
+    # create materials
+    materials = []
+    colors = [(0.639, 0.090, 0.051, 1.0), (0.831, 0.733, 0.110, 1.0), (0.024, 0.471, 0.173, 1.0), (0.980, 0.980, 0.980, 1.0)]
+    for i in range(4):
+        mat = bpy.data.materials.new(name=f'material_{i}')
+        mat.use_nodes = True
+        col = (colors[i][0] ** 2.2, colors[i][1] ** 2.2, colors[i][2] ** 2.2, colors[i][3])
+        mat.node_tree.nodes.get('Principled BSDF').inputs['Base Color'].default_value = col
+        materials.append(mat)
         
+    # load data (1: graphene (red), 2: nanodiamonds (gold), 3: diamond-like carbon (green), 4: diamond-like carbon (white)
+    input_filepattern = getFormatString(args.input_filepattern)
+    # actual radius is 0.75 angstroms
+    base_models = [
+        icoSphere(3, 0.60),
+        icoSphere(3, 0.90),
+        icoSphere(3, 0.45),
+        icoSphere(3, 1.25)
+        
+    ]
+    for i in range(4):
+        input_filename = input_filepattern.format(i+1)
+        xyz_file = open(input_filename, 'r')
+        num_atoms = int(xyz_file.readline().strip())
+        num_atoms_used = 0
+        xyz_file.readline() # throw away next line
+        atoms_mesh = {'vertices': [], 'faces': []}
+        for atom_id in range(num_atoms):
+            line = xyz_file.readline().strip().split(' ')
+            pos = (float(line[1]), float(line[2]), float(line[3]))
+            if i < 3 or pos[2] > 10.0: # filter out some of the large white slab
+                appendModelToMesh(atoms_mesh, base_models[i], pos)
+                num_atoms_used += 1
+        print(f'finished reading XYZ into mesh - using {num_atoms_used} atoms')
+        mesh = bpy.data.meshes.new(f'atoms_{i}')
+        atoms = bpy.data.objects.new(f'atom_{i}', mesh)
+        bpy.context.collection.objects.link(atoms)
+        mesh.from_pydata(atoms_mesh['vertices'], [], atoms_mesh['faces'])
+        for poly in atoms.data.polygons:
+            poly.use_smooth = True
+        atoms.scale = (0.075, 0.075, 0.075)
+        atoms.rotation_euler = (0.0, math.radians(180.0), 0.0)
+        atoms.location = (29.0, -12.5, 4.0)
+        if len(atoms.data.materials) > 0:
+            atoms.data.materials[0] = materials[i]
+        else:
+            atoms.data.materials.append(materials[i])
+        
+        """
+        # NURBS
+        for atom_id in range(num_atoms):
+            line = xyz_file.readline().strip().split(' ')
+            pos = (float(line[1]), float(line[2]), float(line[3]))
+            bpy.ops.surface.primitive_nurbs_surface_sphere_add(location=pos)
+            if (atom_id % 500) == 0:
+                print(f'{atom_id} / {num_atoms}')
+        """
+
+    
     # timer checkpoint - finished data loading/processing, about to start rendering
     mid_time = time.time()
     
     # render styles
-    render_styles = ['solid', 'force', 'solid-transparent', 'force-transparent']
+    render_styles = ['atoms', 'atomsbonds', 'atoms-reflection', 'atomsbonds-reflection']
     if args.render_styles != 'all':
         render_styles = args.render_styles.split(',')
     
     render_times = []
     for style in render_styles:
+        """
         # update materials
         mat_rbc = None
         mat_ctc = None
@@ -212,7 +221,10 @@ def main():
                         obj.data.materials.append(mat)
                     else:
                         obj.data.materials[0] = mat
+        """
+        continue
         
+        """
         # start render timer
         render_start = time.time()
         
@@ -225,7 +237,7 @@ def main():
         # end timer
         render_end = time.time()
         render_times.append(secondsToMMSS(render_end - render_start))
-        
+        """
     
     # end timer
     end_time = time.time()
@@ -259,6 +271,40 @@ def selectRenderDevice(cycles_prefs, device_type, device_number):
         print(f'APP> Error: could not find {device_type} device {device_number}')
         exit(1)
     print(f'APP> Cycles Render Engine using: {device_type} device {device_number}')
+
+
+def getFormatString(a_string):
+    # Change C-style formatting to Python formatting for int substitution
+    return re.sub(r'%(0?[1-9]*d)', r'{:\1}', a_string)
+
+
+def icoSphere(subdivisions, radius):
+    bm = bmesh.new()
+    bmesh.ops.create_icosphere(bm, subdivisions=subdivisions, radius=radius, calc_uvs=False)
+    model = {'vertices': [], 'faces': []}
+    for v in bm.verts:
+        model['vertices'].append((v.co.x, v.co.y, v.co.z))
+    for f in bm.faces:
+        indices = []
+        for v in f.verts:
+            indices.append(v.index)
+        model['faces'].append(indices)
+    bm.free()
+    return model
+
+
+def appendModelToMesh(mesh, model, pos):
+    vert_offset = len(mesh['vertices'])
+    for v in model['vertices']:
+        new_vert = (v[0] + pos[0], v[1] + pos[1], v[2] + pos[2])
+        mesh['vertices'].append(new_vert)
+    for f in model['faces']:
+        new_face = []
+        for i in f:
+            new_face.append(i + vert_offset)
+        mesh['faces'].append(new_face)
+    
+
 
 def secondsToMMSS(seconds):
     mins = int(seconds) // 60

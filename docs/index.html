@@ -43,8 +43,8 @@
             let camera = new BABYLON.ArcRotateCamera('camera', -Math.PI / 2,  Math.PI / 2, 0.1, BABYLON.Vector3.Zero(), scene);
             camera.attachControl(canvas, true);
             camera.inputs.attached.mousewheel.detachControl(canvas);
-            camera.znear = 0.1;
-            camera.zfar = 1000.0;
+            camera.minZ = 0.1;
+            camera.maxZ = 1000.0;
             
             // add photo dome (equirectangular panorama)
             let i;
@@ -58,7 +58,7 @@
                     null,
                     {
                         resolution: 32,
-                        size: 500
+                        size: 1.95//500
                     },
                     scene
                 );
@@ -66,6 +66,7 @@
                 photodome.addRotation(0, Math.PI / 2, 0);
                 let dome_texture = new BABYLON.Texture('data/loading.jpg', scene, false, false, BABYLON.Texture.TRILINEAR_SAMPLINGMODE);
                 photodome.photoTexture = dome_texture;
+                photodome.mesh.renderingGroupId = 0;
                 if (i == backbuffer) {
                     photodome.setEnabled(false);
                 }
@@ -169,6 +170,7 @@
             gui.scaling = new BABYLON.Vector3(0.75, 0.75 * (gui_height / gui_width), 1.0);
             gui.position = new BABYLON.Vector3(0.7, -0.15, 1.0)
             gui.lookAt(gui.position.multiply(new BABYLON.Vector3(2, 2, 2)));
+            gui.renderingGroupId = 1;
             let advanced_texture = BABYLON.GUI.AdvancedDynamicTexture.CreateForMesh(gui, gui_width, gui_height);
             // main gui panel
             let panel = new BABYLON.GUI.StackPanel();
@@ -441,7 +443,7 @@
                     cinemaods_url + '/' + entry.FILEvideo,
                     {
                         resolution: 32,
-                        size: 501,
+                        size: 1.955,//501,
                         autoPlay: false,
                         loop: false
                     },
@@ -452,6 +454,7 @@
                     playPauseVideo();
                 }, false);
                 videodome.addRotation(0, Math.PI / 2, 0);
+                videodome.mesh.renderingGroupId = 0;
             }
             else if (entry.hasOwnProperty('FILEvideo') && value !== 'PAUSE_VIDEO_TEXTURE') {
                 videodome.videoTexture.updateURL(cinemaods_url + '/' + entry.FILEvideo);
