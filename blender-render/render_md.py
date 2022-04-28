@@ -139,55 +139,28 @@ def main():
     input_filepattern = getFormatString(args.input_filepattern)
     # actual radius is 0.75 angstroms
     base_models = [
-        icoSphere(3, 0.60),
-        icoSphere(3, 0.90),
-        icoSphere(3, 0.45),
-        icoSphere(3, 1.25)
+        icoSphere(2, 0.60),
+        icoSphere(2, 0.90),
+        icoSphere(2, 0.45),
+        icoSphere(2, 1.25)
         
     ]
     base_bond = cylinder(8, 0.2, 1.0)
-    # BEGIN TEST
-    bond_mesh = bpy.data.meshes.new('bond')
-    bond = bpy.data.objects.new('bond', bond_mesh)
-    bpy.context.collection.objects.link(bond)
-    test_bonds = [(mathutils.Vector((2, 3, 1)), mathutils.Vector((4, 4, 3))),
-                  (mathutils.Vector((-1, 0, -1)), mathutils.Vector((-3, -1, 1)))]
-    mat3_scale = mathutils.Matrix.Identity(3)
-    bonds_mesh = {'vertices': [], 'faces': []}
-    for b in test_bonds:
-        direction = b[1] - b[0]
-        mat3_scale[2][2] = direction.length
-        mat3_rotate = direction.to_track_quat('Z', 'Y').to_matrix()
-        verts = [mat3_rotate @ mat3_scale @ v for v in base_bond['vertices']]
-        appendModelToMesh(bonds_mesh, {'vertices': verts, 'faces': base_bond['faces']}, b[0])
-    
-    bond_mesh.from_pydata(bonds_mesh['vertices'], [], bonds_mesh['faces'])
-    for poly in bond.data.polygons:
-        poly.use_smooth = True
-    #direction = mathutils.Vector((2, 1, 2))
-    #bond.scale = (1.0, 1.0, direction.length)
-    #direction.normalize()
-    #bond.rotation_euler = direction.to_track_quat('Z', 'Y').to_euler()
-    #bond.location = (2, 3, 1)
-    
-    # Quaternion `to_matrix()` => 3x3 mat
-    # multiply by scale matrix `m = Matrix.Identity(3)` followed by `m[2][2] = direction.length`
-    
-    # END TEST
-    
-    """
     for i in range(4):
+        # atoms (spheres)
         input_filename = input_filepattern.format(i+1)
         xyz_file = open(input_filename, 'r')
         num_atoms = int(xyz_file.readline().strip())
         num_atoms_used = 0
         xyz_file.readline() # throw away next line
         atoms_mesh = {'vertices': [], 'faces': []}
-        for atom_id in range(num_atoms):
+        atom_positions = []
+        for _a in range(num_atoms):
             line = xyz_file.readline().strip().split(' ')
             pos = (float(line[1]), float(line[2]), float(line[3]))
-            if i < 3 or pos[2] > 10.0: # filter out some of the large white slab
+            if i < 3 or pos[2] > 9.0: # filter out some of the large white slab
                 appendModelToMesh(atoms_mesh, base_models[i], pos)
+                atom_positions.append(pos)
                 num_atoms_used += 1
         print(f'finished reading XYZ into mesh - using {num_atoms_used} atoms')
         mesh = bpy.data.meshes.new(f'atoms_{i}')
@@ -196,14 +169,45 @@ def main():
         mesh.from_pydata(atoms_mesh['vertices'], [], atoms_mesh['faces'])
         for poly in atoms.data.polygons:
             poly.use_smooth = True
-        atoms.scale = (0.075, 0.075, 0.075)
+        atoms.scale = (0.1, 0.1, 0.1)
         atoms.rotation_euler = (0.0, math.radians(180.0), 0.0)
-        atoms.location = (29.0, -12.5, 4.0)
+        atoms.location = (35.0, -15.0, 5.0)
         if len(atoms.data.materials) > 0:
             atoms.data.materials[0] = materials[i]
         else:
             atoms.data.materials.append(materials[i])
-    """
+        
+        # bonds (cylinders)
+        if args.bonds and (i == 0 or i == 2):
+            bond_file = open(input_filename + '.bond', 'r')
+            bond_indices = []
+            num_bonds = int(bond_file.readline().strip())
+            bond_file.readline() # throw away next line
+            for _b in range(num_bonds):
+                line = bond_file.readline().strip().split(' ')
+                bond_indices.append((int(line[0]), int(line[1])))
+            bond_mesh = bpy.data.meshes.new('bond')
+            bonds = bpy.data.objects.new('bond', bond_mesh)
+            bpy.context.collection.objects.link(bonds)
+            mat3_scale = mathutils.Matrix.Identity(3)
+            bonds_mesh = {'vertices': [], 'faces': []}
+            for b in bond_indices:
+                direction = mathutils.Vector(atom_positions[b[1]]) - mathutils.Vector(atom_positions[b[0]])
+                mat3_scale[2][2] = direction.length
+                mat3_rotate = direction.to_track_quat('Z', 'Y').to_matrix()
+                verts = [mat3_rotate @ mat3_scale @ v for v in base_bond['vertices']]
+                appendModelToMesh(bonds_mesh, {'vertices': verts, 'faces': base_bond['faces']}, atom_positions[b[0]])
+            bond_mesh.from_pydata(bonds_mesh['vertices'], [], bonds_mesh['faces'])
+            for poly in bonds.data.polygons:
+                poly.use_smooth = True
+            bonds.scale = (0.1, 0.1, 0.1)
+            bonds.rotation_euler = (0.0, math.radians(180.0), 0.0)
+            bonds.location = (35.0, -15.0, 5.0)
+            if len(bonds.data.materials) > 0:
+                bonds.data.materials[0] = materials[i]
+            else:
+                bonds.data.materials.append(materials[i])
+            
     
     """
     # NURBS
@@ -359,7 +363,6 @@ def appendModelToMesh(mesh, model, pos):
         for i in f:
             new_face.append(i + vert_offset)
         mesh['faces'].append(new_face)
-    
 
 
 def secondsToMMSS(seconds):
