@@ -138,17 +138,24 @@ def main():
     # load data (1: graphene (red), 2: nanodiamonds (gold), 3: diamond-like carbon (green), 4: diamond-like carbon (white)
     input_filepattern = getFormatString(args.input_filepattern)
     # actual radius is 0.75 angstroms
-    base_models = [
+    base_models_l = [
         icoSphere(2, 0.60),
         icoSphere(2, 0.90),
         icoSphere(2, 0.45),
-        icoSphere(2, 1.25)
+        icoSphere(2, 1.15)
+        
+    ]
+    base_models_h = [
+        icoSphere(3, 0.60),
+        icoSphere(3, 0.90),
+        icoSphere(3, 0.45),
+        icoSphere(3, 1.15)
         
     ]
     base_bond = cylinder(8, 0.2, 1.0)
     for i in range(4):
         # atoms (spheres)
-        input_filename = input_filepattern.format(i+1)
+        input_filename = input_filepattern.format(num=i+1)
         xyz_file = open(input_filename, 'r')
         num_atoms = int(xyz_file.readline().strip())
         num_atoms_used = 0
@@ -159,7 +166,11 @@ def main():
             line = xyz_file.readline().strip().split(' ')
             pos = (float(line[1]), float(line[2]), float(line[3]))
             if i < 3 or pos[2] > 9.0: # filter out some of the large white slab
-                appendModelToMesh(atoms_mesh, base_models[i], pos)
+                t_pos = (pos[0] * -0.1 + 35.0, pos[1] * 0.1 - 15.0, pos[2] * -0.1 + 5.0) 
+                if (distance2(cam_position, t_pos) < 100.0):
+                    appendModelToMesh(atoms_mesh, base_models_h[i], pos)
+                else:
+                    appendModelToMesh(atoms_mesh, base_models_l[i], pos)
                 atom_positions.append(pos)
                 num_atoms_used += 1
         print(f'finished reading XYZ into mesh - using {num_atoms_used} atoms')
@@ -312,7 +323,7 @@ def selectRenderDevice(cycles_prefs, device_type, device_number):
 
 def getFormatString(a_string):
     # Change C-style formatting to Python formatting for int substitution
-    return re.sub(r'%(0?[1-9]*d)', r'{:\1}', a_string)
+    return re.sub(r'%(0?[1-9]*d)', r'{num:\1}', a_string)
 
 
 def icoSphere(subdivisions, radius):
@@ -364,6 +375,12 @@ def appendModelToMesh(mesh, model, pos):
             new_face.append(i + vert_offset)
         mesh['faces'].append(new_face)
 
+
+def distance2(p0, p1):
+    dx = p1[0] - p0[0]
+    dy = p1[1] - p0[1]
+    dz = p1[2] - p0[2]
+    return dx * dx + dy * dy + dz * dz
 
 def secondsToMMSS(seconds):
     mins = int(seconds) // 60
