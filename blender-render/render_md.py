@@ -80,14 +80,15 @@ def main():
     # add lights
     sun_data = bpy.data.lights.new('Sun', type='SUN')
     sun = bpy.data.objects.new('Sun', sun_data)
-    sun.location = (0.0, 0.0, 20.0)
-    sun.data.energy = 5.0
+    sun.location = (0.0, 0.0, 10.0)
+    sun.rotation_euler = (math.radians(-15.0), math.radians(20.0), 0.0)
+    sun.data.energy = 2.0
     bpy.context.collection.objects.link(sun)
     
     light_data = bpy.data.lights.new('Light', type='POINT')
     light = bpy.data.objects.new('Light', light_data)
     light.location = light_position
-    light.data.energy = 150.0
+    light.data.energy = 75.0
     light.data.shadow_soft_size = 1.0
     bpy.context.collection.objects.link(light)
     
@@ -132,22 +133,50 @@ def main():
         mat = bpy.data.materials.new(name=f'material_{i}')
         mat.use_nodes = True
         col = (colors[i][0] ** 2.2, colors[i][1] ** 2.2, colors[i][2] ** 2.2, colors[i][3])
-        mat.node_tree.nodes.get('Principled BSDF').inputs['Base Color'].default_value = col
+        principled_bsdf = mat.node_tree.nodes.get('Principled BSDF')
+        principled_bsdf.inputs['Base Color'].default_value = col
+        if i == 1:
+            material_output = mat.node_tree.nodes.get('Material Output')
+            principled_bsdf.location = (-200, 100)
+            principled_bsdf.inputs['Roughness'].default_value = 0.25
+            layer_weight = mat.node_tree.nodes.new('ShaderNodeLayerWeight') # facing --> color_ramp fac
+            layer_weight.location = (-950, 250)
+            color_ramp = mat.node_tree.nodes.new('ShaderNodeValToRGB') # start pos @ 0.2, end pos @ 1.0, color --> rgb_curves color
+            color_ramp.location = (-760, 250)
+            color_ramp.color_ramp.elements[0].position = (0.2)
+            color_ramp.color_ramp.elements[1].position = (1.0)
+            rgb_curves = mat.node_tree.nodes.new('ShaderNodeRGBCurve') # x: 0.75, y: 0.28, color --> emission color
+            rgb_curves.location = (-475, 250)
+            rgb_curves.mapping.curves[3].points.new(0.75, 0.28)
+            rgb_curves.mapping.update()
+            emission = mat.node_tree.nodes.new('ShaderNodeEmission')
+            emission.location = (-200, 250)
+            emission.inputs['Strength'].default_value = 0.9
+            add = mat.node_tree.nodes.new('ShaderNodeAddShader')
+            add.location = (100, 200)
+            mat.node_tree.links.new(color_ramp.inputs[0], layer_weight.outputs[1])
+            mat.node_tree.links.new(rgb_curves.inputs[1], color_ramp.outputs[0])
+            mat.node_tree.links.new(emission.inputs[0], rgb_curves.outputs[0])
+            mat.node_tree.links.new(add.inputs[0], emission.outputs[0])
+            mat.node_tree.links.new(add.inputs[1], principled_bsdf.outputs[0])
+            mat.node_tree.links.new(material_output.inputs[0], add.outputs[0])
+            
+            
         materials.append(mat)
         
     # load data (1: graphene (red), 2: nanodiamonds (gold), 3: diamond-like carbon (green), 4: diamond-like carbon (white)
     input_filepattern = getFormatString(args.input_filepattern)
     # actual radius is 0.75 angstroms
     base_models_l = [
-        icoSphere(2, 0.60),
-        icoSphere(2, 0.90),
+        icoSphere(2, 0.45),
+        icoSphere(2, 1.00),
         icoSphere(2, 0.45),
         icoSphere(2, 1.15)
         
     ]
     base_models_h = [
-        icoSphere(3, 0.60),
-        icoSphere(3, 0.90),
+        icoSphere(3, 0.45),
+        icoSphere(3, 1.00),
         icoSphere(3, 0.45),
         icoSphere(3, 1.15)
         
@@ -165,12 +194,19 @@ def main():
         for _a in range(num_atoms):
             line = xyz_file.readline().strip().split(' ')
             pos = (float(line[1]), float(line[2]), float(line[3]))
-            if i < 3 or pos[2] > 9.0: # filter out some of the large white slab
+            if i < 3 or pos[2] > 8.0: # filter out some of the large white slab
+                """
+                if pos[2] > 14.0:
+                    appendModelToMesh(atoms_mesh, base_models_h[i], pos)
+                else:
+                    appendModelToMesh(atoms_mesh, base_models_l[i], pos)
+                """
                 t_pos = (pos[0] * -0.1 + 35.0, pos[1] * 0.1 - 15.0, pos[2] * -0.1 + 5.0) 
                 if (distance2(cam_position, t_pos) < 100.0):
                     appendModelToMesh(atoms_mesh, base_models_h[i], pos)
                 else:
                     appendModelToMesh(atoms_mesh, base_models_l[i], pos)
+                
                 atom_positions.append(pos)
                 num_atoms_used += 1
         print(f'finished reading XYZ into mesh - using {num_atoms_used} atoms')
@@ -187,6 +223,8 @@ def main():
             atoms.data.materials[0] = materials[i]
         else:
             atoms.data.materials.append(materials[i])
+        if i == 3:
+            atoms.visible_shadow = False
         
         # bonds (cylinders)
         if args.bonds and (i == 0 or i == 2):
@@ -197,8 +235,8 @@ def main():
             for _b in range(num_bonds):
                 line = bond_file.readline().strip().split(' ')
                 bond_indices.append((int(line[0]), int(line[1])))
-            bond_mesh = bpy.data.meshes.new('bond')
-            bonds = bpy.data.objects.new('bond', bond_mesh)
+            bond_mesh = bpy.data.meshes.new(f'bond_{i}')
+            bonds = bpy.data.objects.new(f'bond_{i}', bond_mesh)
             bpy.context.collection.objects.link(bonds)
             mat3_scale = mathutils.Matrix.Identity(3)
             bonds_mesh = {'vertices': [], 'faces': []}
