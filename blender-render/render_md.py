@@ -18,7 +18,7 @@ def main():
     parser.add_argument('-n', '--device-num', type=int, default=0, help='device number')
     parser.add_argument('-cp', '--camera-position', type=str, default='(0.0,0.0,1.65)', help='camera position (x,y,z)')
     parser.add_argument('-cd', '--camera-direction', type=str, default='(90,0,90)', help='camera direction in degrees (x,y,z)')
-    parser.add_argument('-rs', '--render-styles',type=str, default='atoms', help='list of render styles (atoms,atomsbonds,atoms-reflection,atomsbonds-reflection) or all')
+    parser.add_argument('-rs', '--render-styles',type=str, default='atoms', help='list of render styles (atoms,atomsbonds) or all')
     parser.add_argument('-b', '--bonds', action='store_true', default=False, help='show bonds between atoms') 
     parser.add_argument('-o', '--output', type=str, default='output.jpg', help='filename to save rendered output')
 
@@ -182,6 +182,7 @@ def main():
         
     ]
     base_bond = cylinder(8, 0.2, 1.0)
+    bonds_list = []
     for i in range(4):
         # atoms (spheres)
         input_filename = input_filepattern.format(num=i+1)
@@ -256,6 +257,7 @@ def main():
                 bonds.data.materials[0] = materials[i]
             else:
                 bonds.data.materials.append(materials[i])
+            bonds_list.append(bonds)
             
     
     """
@@ -273,44 +275,18 @@ def main():
     mid_time = time.time()
     
     # render styles
-    render_styles = ['atoms', 'atomsbonds', 'atoms-reflection', 'atomsbonds-reflection']
+    render_styles = ['atoms', 'atomsbonds']
     if args.render_styles != 'all':
         render_styles = args.render_styles.split(',')
     
     render_times = []
     for style in render_styles:
-        """
-        # update materials
-        mat_rbc = None
-        mat_ctc = None
-        if style == 'force':
-            mat_rbc = bpy.data.materials.get(mat_rbc_force_name)
-            mat_ctc = bpy.data.materials.get(mat_ctc_force_name)
-        elif style == 'solid-transparent':
-            mat_rbc = bpy.data.materials.get(mat_rbc_solid_trans_name)
-            mat_ctc = bpy.data.materials.get(mat_ctc_solid_name)
-        elif style == 'force-transparent':
-            mat_rbc = bpy.data.materials.get(mat_rbc_force_trans_name)
-            mat_ctc = bpy.data.materials.get(mat_ctc_force_name)
-        else: # solid
-            mat_rbc = bpy.data.materials.get(mat_rbc_solid_name)
-            mat_ctc = bpy.data.materials.get(mat_ctc_solid_name)
-        for model in models:
-            mat = None
-            if model['type'] == 'rbc':
-                mat = mat_rbc
-            elif model['type'] == 'ctc':
-                mat = mat_ctc
-            for obj in model['objs']:
-                if mat != None:
-                    if len(obj.data.materials) == 0:
-                        obj.data.materials.append(mat)
-                    else:
-                        obj.data.materials[0] = mat
-        """
-        continue
+        hide_bonds = True
+        if style == 'atomsbonds':
+            hide_bonds = False
+        for bond in bonds_list:
+            bond.hide_render = hide_bonds
         
-        """
         # start render timer
         render_start = time.time()
         
@@ -323,7 +299,6 @@ def main():
         # end timer
         render_end = time.time()
         render_times.append(secondsToMMSS(render_end - render_start))
-        """
     
     # end timer
     end_time = time.time()
