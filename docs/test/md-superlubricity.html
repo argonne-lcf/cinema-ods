@@ -1,0 +1,114 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="utf-8"/>
+    <meta name="viewport" content="width=device-width, initial-scale=1"/>
+    <meta name='mobile-web-app-capable' content='yes'>
+    <meta name='apple-mobile-web-app-capable' content='yes'>
+    <title>Omnidirectional Stereo Image Viewer</title>
+    <link rel="stylesheet" href="../css/style.css"/>
+    <script type="application/javascript" src="https://cdn.babylonjs.com/babylon.js"></script>
+    <script type="application/javascript" src="https://cdn.babylonjs.com/loaders/babylonjs.loaders.min.js"></script>
+    <script type="application/javascript">
+        let xr_control;
+        let scene;
+        
+        function init() {
+            // get the canvas element
+            let canvas = document.getElementById('render');
+            // generate the Babylon 3D engine
+            let engine = new BABYLON.Engine(canvas, true);
+
+            // create scene
+            createScene(canvas, engine);
+        }
+        
+        function createScene(canvas, engine) {
+            // creates a basic Babylon Scene object (non-mesh)
+            scene = new BABYLON.Scene(engine);
+            
+            // add a camera to the scene and attach it to the canvas
+            let camera = new BABYLON.ArcRotateCamera('camera', -Math.PI / 2,  Math.PI / 2, 0.1, BABYLON.Vector3.Zero(), scene);
+            camera.attachControl(canvas, true);
+            camera.inputs.attached.mousewheel.detachControl(canvas);
+            camera.minZ = 0.1;
+            camera.maxZ = 1000.0;
+            
+            // add glTF models
+            // Part 01
+            BABYLON.SceneLoader.ImportMesh("", "models/", "part01.glb", scene);
+            // Part 02
+            BABYLON.SceneLoader.ImportMesh("", "models/", "part02.glb", scene);
+            // Part 03
+            BABYLON.SceneLoader.ImportMesh("", "models/", "part03.glb", scene);
+            // Part 04
+            BABYLON.SceneLoader.ImportMesh("", "models/", "part04.glb", scene);
+            
+            // default environment
+            const environment = scene.createDefaultEnvironment();
+
+            // WebXR
+            scene.createDefaultXRExperienceAsync({floorMeshes: [environment.ground]})
+            .then((xr_helper) => {
+                xr_control = xr_helper;
+                xr_control.teleportation.detach();
+                
+                xr_control.input.onControllerAddedObservable.add((controller) => {
+                    controller.onMotionControllerInitObservable.add((motion_controller) => {
+                        if (motion_controller.handness === 'right') {
+                            buttons = motion_controller.getAllComponentsOfType('button');
+                            if (buttons.length) {
+                                button_b = null;
+                                for (let i = 0; i < buttons.length; i++) {
+                                    if (buttons[i].id === 'b-button'){
+                                        button_b = buttons[i];
+                                    }
+                                }
+                                if (button_b !== null){
+                                    button_b.onButtonStateChangedObservable.add(() => {
+                                        if (button_b.changes.pressed && button_b.pressed) {
+                                            console.log('B button pressed!');
+                                            exitVr();
+                                        }
+                                    });
+                                } 
+                            }
+                        }
+                    });
+                });
+
+                startRenderLoop(engine);
+            })
+            .catch((err) => {
+                console.log(err);
+            });
+
+        }
+        
+        function startRenderLoop(engine) {
+            // register a render loop to repeatedly render the scene
+            engine.runRenderLoop(() => {
+                scene.render();
+            });
+
+            // watch for browser/canvas resize events
+            window.addEventListener('resize', () => {
+                engine.resize();
+            });
+        }
+        
+        function exitVr() {
+            xr_control.baseExperience.exitXRAsync().then(() => {
+                // nothing
+            });
+        }
+    </script>
+</head>
+<body onload="init()">
+    <div id="instructions">
+        <h1>Instructions</h1>
+        <p>Click on the VR Headset icon in the bottom-right to enter immersive mode. If this icon is not shown, your device does not support virtual reality for this application.</p>
+    </div>
+    <canvas id="render" touch-action="none"></canvas>
+</body>
+</html>
