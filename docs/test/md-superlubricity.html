@@ -12,12 +12,14 @@
     <script type="application/javascript">
         let xr_control;
         let scene;
+        let engine_test;
         
         function init() {
             // get the canvas element
             let canvas = document.getElementById('render');
             // generate the Babylon 3D engine
             let engine = new BABYLON.Engine(canvas, true);
+            engine_test = engine;
 
             // create scene
             createScene(canvas, engine);
@@ -60,11 +62,23 @@
                         if (motion_controller.handness === 'right') {
                             buttons = motion_controller.getAllComponentsOfType('button');
                             if (buttons.length) {
+                                button_a = null;
                                 button_b = null;
                                 for (let i = 0; i < buttons.length; i++) {
-                                    if (buttons[i].id === 'b-button'){
+                                console.log(buttons[i].id);
+                                    if (buttons[i].id === 'a-button') {
+                                        button_a = buttons[i];
+                                    } else if (buttons[i].id === 'b-button'){
                                         button_b = buttons[i];
                                     }
+                                }
+                                if (button_a !== null) {
+                                    button_a.onButtonStateChangedObservable.add(() => {
+                                        if (button_a.changes.pressed && button_a.pressed) {
+                                            console.log('A button pressed!');
+                                            startPerformanceTest(engine);
+                                        }
+                                    });
                                 }
                                 if (button_b !== null){
                                     button_b.onButtonStateChangedObservable.add(() => {
@@ -99,10 +113,45 @@
             });
         }
         
+        function startPerformanceTest(engine) {
+            let test_time = 15; //60;
+            let pm = engine.performanceMonitor;
+            pm.enable();
+            setTimeout(() => {
+                let fps = pm.averageFPS;
+                console.log(fps);
+                httpPost('/fpsUpload', {fps: fps});
+                pm.disable();
+            }, test_time * 1000);
+        }
+        
         function exitVr() {
             xr_control.baseExperience.exitXRAsync().then(() => {
                 // nothing
             });
+        }
+        
+        function objToFormStr(obj) {
+            let key;
+            let str = ''
+            for (key in obj) {
+                if (obj.hasOwnProperty(key)) {
+                    str += key + '=' + obj[key] + '&'
+                }
+            }
+            return str.substring(0, str.length - 1);
+        }
+        
+        function httpPost(url, data) {
+            let xhr = new XMLHttpRequest();
+            xhr.open('POST', url, true);
+            xhr.setRequestHeader('Content-Type', 'application/x-www-form-urlencoded');
+            xhr.onreadystatechange = () => {
+                if (xhr.readyState === XMLHttpRequest.DONE && xhr.status === 200) {
+                    console.log('POST sent');
+                }
+            }
+            xhr.send(objToFormStr(data));
         }
     </script>
 </head>
