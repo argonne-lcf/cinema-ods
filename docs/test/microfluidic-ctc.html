@@ -33,6 +33,8 @@
             camera.inputs.attached.mousewheel.detachControl(canvas);
             camera.minZ = 0.1;
             camera.maxZ = 1000.0;
+            camera.position = new BABYLON.Vector3(0.0, 1.6, 1.2);
+            camera.target = new BABYLON.Vector3(0.0, 1.6, 0.0);
             
             // add glTF models
             // Microposts
