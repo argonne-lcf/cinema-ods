@@ -107,6 +107,7 @@
                                             if (gui.isEnabled()){
                                                 //if already visible, then hide
                                                 gui.setEnabled(false);
+                                                startPerformanceTest(engine);
                                             } else {
                                                 //reappear if invisible
                                                 gui.setEnabled(true);
@@ -114,7 +115,7 @@
                                                 let ray = new BABYLON.Ray();
                                                 ray.origin = new BABYLON.Vector3();
                                                 ray.direction = new BABYLON.Vector3();
-                                                controller.getWorldPointerRayToRef(tmpRay);
+                                                controller.getWorldPointerRayToRef(ray);
                                                 ray.direction.scaleInPlace(1.23);
 
                                                 gui.position = ray.origin.add(ray.direction);
@@ -132,7 +133,7 @@
                                             let ray = new BABYLON.Ray();
                                             ray.origin = new BABYLON.Vector3();
                                             ray.direction = new BABYLON.Vector3();
-                                            controller.getWorldPointerRayToRef(tmpRay);
+                                            controller.getWorldPointerRayToRef(ray);
                                             ray.direction.scaleInPlace(1.23);
 
                                             gui.position = ray.origin.add(ray.direction);
@@ -583,11 +584,46 @@
 
             return cdb.getRow(row_values);
         }
-        
+
+        function startPerformanceTest(engine) {
+            let test_time = 15; //60;
+            let pm = engine.performanceMonitor;
+            pm.enable();
+            setTimeout(() => {
+                let fps = pm.averageFPS;
+                console.log(fps);
+                httpPost('/fpsUpload', {fps: fps});
+                pm.disable();
+            }, test_time * 1000);
+        }
+
         function exitVr() {
             xr_control.baseExperience.exitXRAsync().then(() => {
                 // nothing
             });
+        }
+
+        function objToFormStr(obj) {
+            let key;
+            let str = ''
+            for (key in obj) {
+                if (obj.hasOwnProperty(key)) {
+                    str += key + '=' + obj[key] + '&'
+                }
+            }
+            return str.substring(0, str.length - 1);
+        }
+
+        function httpPost(url, data) {
+            let xhr = new XMLHttpRequest();
+            xhr.open('POST', url, true);
+            xhr.setRequestHeader('Content-Type', 'application/x-www-form-urlencoded');
+            xhr.onreadystatechange = () => {
+                if (xhr.readyState === XMLHttpRequest.DONE && xhr.status === 200) {
+                    console.log('POST sent');
+                }
+            }
+            xhr.send(objToFormStr(data));
         }
         
         function runTests() {

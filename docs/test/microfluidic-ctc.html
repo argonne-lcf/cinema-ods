@@ -29,6 +29,7 @@
         function createScene(canvas, engine) {
             // creates a basic Babylon Scene object (non-mesh)
             scene = new BABYLON.Scene(engine);
+            scene.skipPointerMovePicking = true;
             
             // add a camera to the scene and attach it to the canvas
             let camera = new BABYLON.ArcRotateCamera('camera', -Math.PI / 2,  Math.PI / 2, 0.1, BABYLON.Vector3.Zero(), scene);
@@ -41,23 +42,85 @@
             
             // add glTF models
             // Microposts
-            BABYLON.SceneLoader.ImportMesh("", "models/", "microposts.glb", scene);
+            BABYLON.SceneLoader.LoadAssetContainer("models/", "microposts.glb", scene, (gltf) => {
+                console.log('Material Count: ', gltf.materials.length);
+                console.log('Mesh Count: ', gltf.meshes.length);
+                let i;
+                for (i = 0; i < gltf.materials.length; i++) {
+                    gltf.materials[i].backFaceCulling = true;
+                    gltf.materials[i].freeze();
+                }
+                for (i = 0; i < gltf.meshes.length; i++) {
+                    gltf.meshes[i].freezeWorldMatrix();
+                    gltf.meshes[i].isPickable = false;
+                    gltf.meshes[i].doNotSyncBoundingInfo = true;
+                }
+                gltf.addAllToScene();
+            });
             // RBC
-            BABYLON.SceneLoader.ImportMesh("", "models/", "rbc.glb", scene);
+            BABYLON.SceneLoader.LoadAssetContainer("models/", "rbc.glb", scene, (gltf) => {
+                console.log('Material Count: ', gltf.materials.length);
+                console.log('Mesh Count: ', gltf.meshes.length);
+                let i;
+                for (i = 0; i < gltf.materials.length; i++) {
+                    gltf.materials[i].backFaceCulling = true;
+                    gltf.materials[i].freeze();
+                }
+                for (i = 0; i < gltf.meshes.length; i++) {
+                    gltf.meshes[i].freezeWorldMatrix();
+                    gltf.meshes[i].isPickable = false;
+                    gltf.meshes[i].doNotSyncBoundingInfo = true;
+                }
+                gltf.addAllToScene();
+            });
             // CTC
-            BABYLON.SceneLoader.ImportMesh("", "models/", "ctc.glb", scene);
+            BABYLON.SceneLoader.LoadAssetContainer("models/", "ctc.glb", scene, (gltf) => {
+                console.log('Material Count: ', gltf.materials.length);
+                console.log('Mesh Count: ', gltf.meshes.length);
+                let i;
+                for (i = 0; i < gltf.materials.length; i++) {
+                    gltf.materials[i].backFaceCulling = true;
+                    gltf.materials[i].freeze();
+                }
+                for (i = 0; i < gltf.meshes.length; i++) {
+                    gltf.meshes[i].freezeWorldMatrix();
+                    gltf.meshes[i].isPickable = false;
+                    gltf.meshes[i].doNotSyncBoundingInfo = true;
+                }
+                gltf.addAllToScene();
+            });
             // Streamlines
-            BABYLON.SceneLoader.ImportMesh("", "models/", "streamlines.glb", scene);
-            
+            BABYLON.SceneLoader.LoadAssetContainer("models/", "streamlines.glb", scene, (gltf) => {
+                console.log('Material Count: ', gltf.materials.length);
+                console.log('Mesh Count: ', gltf.meshes.length);
+                let i;
+                for (i = 0; i < gltf.materials.length; i++) {
+                    gltf.materials[i].backFaceCulling = true;
+                    gltf.materials[i].freeze();
+                }
+                for (i = 0; i < gltf.meshes.length; i++) {
+                    gltf.meshes[i].freezeWorldMatrix();
+                    gltf.meshes[i].isPickable = false;
+                    gltf.meshes[i].doNotSyncBoundingInfo = true;
+                }
+                gltf.addAllToScene();
+            });
+
             // default environment
-            const environment = scene.createDefaultEnvironment();
+            let env_options = {
+                createSkybox: false,
+                createGround: true,
+                groundSize: 1000,
+                groundOpacity: 0.0
+            };
+            const environment = scene.createDefaultEnvironment(env_options);
 
             // WebXR
-            scene.createDefaultXRExperienceAsync({floorMeshes: [environment.ground]})
+            scene.createDefaultXRExperienceAsync({floorMeshes: [environment.ground], useMultiview: true})
             .then((xr_helper) => {
                 xr_control = xr_helper;
-                xr_control.teleportation.detach();
-                
+                xr_control.teleportation.detach();               
+ 
                 xr_control.input.onControllerAddedObservable.add((controller) => {
                     controller.onMotionControllerInitObservable.add((motion_controller) => {
                         if (motion_controller.handness === 'right') {
@@ -85,6 +148,7 @@
                                     button_b.onButtonStateChangedObservable.add(() => {
                                         if (button_b.changes.pressed && button_b.pressed) {
                                             console.log('B button pressed!');
+                                            console.log(xr_control);
                                             exitVr();
                                         }
                                     });
@@ -105,7 +169,7 @@
         function startRenderLoop(engine) {
             // register a render loop to repeatedly render the scene
             engine.runRenderLoop(() => {
-                scene.render();
+                scene.render(true, true);
             });
 
             // watch for browser/canvas resize events
