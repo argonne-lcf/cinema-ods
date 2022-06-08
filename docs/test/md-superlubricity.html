@@ -40,19 +40,81 @@
             
             // add glTF models
             // Part 01
-            BABYLON.SceneLoader.ImportMesh("", "models/", "part01.glb", scene);
+            BABYLON.SceneLoader.LoadAssetContainer("models/", "part01.glb", scene, (gltf) => {
+                console.log('Material Count: ', gltf.materials.length);
+                console.log('Mesh Count: ', gltf.meshes.length);
+                let i;
+                for (i = 0; i < gltf.materials.length; i++) {
+                    gltf.materials[i].backFaceCulling = true;
+                    gltf.materials[i].freeze();
+                }
+                for (i = 0; i < gltf.meshes.length; i++) {
+                    gltf.meshes[i].freezeWorldMatrix();
+                    gltf.meshes[i].isPickable = false;
+                    gltf.meshes[i].doNotSyncBoundingInfo = true;
+                }
+                gltf.addAllToScene();
+            });
             // Part 02
-            BABYLON.SceneLoader.ImportMesh("", "models/", "part02.glb", scene);
+            BABYLON.SceneLoader.LoadAssetContainer("models/", "part02.glb", scene, (gltf) => {
+                console.log('Material Count: ', gltf.materials.length);
+                console.log('Mesh Count: ', gltf.meshes.length);
+                let i;
+                for (i = 0; i < gltf.materials.length; i++) {
+                    gltf.materials[i].backFaceCulling = true;
+                    gltf.materials[i].freeze();
+                }
+                for (i = 0; i < gltf.meshes.length; i++) {
+                    gltf.meshes[i].freezeWorldMatrix();
+                    gltf.meshes[i].isPickable = false;
+                    gltf.meshes[i].doNotSyncBoundingInfo = true;
+                }
+                gltf.addAllToScene();
+            });
             // Part 03
-            BABYLON.SceneLoader.ImportMesh("", "models/", "part03.glb", scene);
+            BABYLON.SceneLoader.LoadAssetContainer("models/", "part03.glb", scene, (gltf) => {
+                console.log('Material Count: ', gltf.materials.length);
+                console.log('Mesh Count: ', gltf.meshes.length);
+                let i;
+                for (i = 0; i < gltf.materials.length; i++) {
+                    gltf.materials[i].backFaceCulling = true;
+                    gltf.materials[i].freeze();
+                }
+                for (i = 0; i < gltf.meshes.length; i++) {
+                    gltf.meshes[i].freezeWorldMatrix();
+                    gltf.meshes[i].isPickable = false;
+                    gltf.meshes[i].doNotSyncBoundingInfo = true;
+                }
+                gltf.addAllToScene();
+            });
             // Part 04
-            BABYLON.SceneLoader.ImportMesh("", "models/", "part04.glb", scene);
+            BABYLON.SceneLoader.LoadAssetContainer("models/", "part04.glb", scene, (gltf) => {
+                console.log('Material Count: ', gltf.materials.length);
+                console.log('Mesh Count: ', gltf.meshes.length);
+                let i;
+                for (i = 0; i < gltf.materials.length; i++) {
+                    gltf.materials[i].backFaceCulling = true;
+                    gltf.materials[i].freeze();
+                }
+                for (i = 0; i < gltf.meshes.length; i++) {
+                    gltf.meshes[i].freezeWorldMatrix();
+                    gltf.meshes[i].isPickable = false;
+                    gltf.meshes[i].doNotSyncBoundingInfo = true;
+                }
+                gltf.addAllToScene();
+            });
             
             // default environment
-            const environment = scene.createDefaultEnvironment();
+             let env_options = {
+                createSkybox: false,
+                createGround: true,
+                groundSize: 1000,
+                groundOpacity: 0.0
+            };
+            const environment = scene.createDefaultEnvironment(env_options);
 
             // WebXR
-            scene.createDefaultXRExperienceAsync({floorMeshes: [environment.ground]})
+            scene.createDefaultXRExperienceAsync({floorMeshes: [environment.ground], useMultiview: true})
             .then((xr_helper) => {
                 xr_control = xr_helper;
                 xr_control.teleportation.detach();
