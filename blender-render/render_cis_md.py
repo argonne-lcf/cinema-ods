@@ -8,6 +8,11 @@ import re
 import sys
 import time
 
+sys.path.append('C:\Program Files\Python39\Lib\site-packages')
+
+import numpy as np
+import OpenEXR
+
 
 def main():
     # parse command line arguments
@@ -20,7 +25,7 @@ def main():
     parser.add_argument('-cd', '--camera-direction', type=str, default='(90,0,90)', help='camera direction in degrees (x,y,z)')
     parser.add_argument('-rs', '--render-styles',type=str, default='atoms', help='list of render styles (atoms,atomsbonds) or all')
     parser.add_argument('-b', '--bonds', action='store_true', default=False, help='show bonds between atoms') 
-    parser.add_argument('-o', '--output', type=str, default='output.jpg', help='filename to save rendered output')
+    parser.add_argument('-o', '--output', type=str, default='output', help='base filename to save rendered output')
 
     args = parser.parse_args(sys.argv[sys.argv.index("--") + 1:])
 
@@ -117,14 +122,28 @@ def main():
     bpy.context.scene.render.image_settings.views_format = 'STEREO_3D'
     bpy.context.scene.render.image_settings.stereo_3d_format.display_mode = 'TOPBOTTOM'
     
-    # set background to blue
+    # set background to transparent and make output save OpenEXR
+    bpy.context.view_layer.use_pass_z = True
     bpy.context.scene.render.film_transparent = True
     bpy.context.scene.use_nodes = True
     tree = bpy.context.scene.node_tree
+    tree.nodes[0].location = (700, 300)
+    tree.nodes[1].location = (0, 200)
     alpha_over = tree.nodes.new(type='CompositorNodeAlphaOver')
-    link_1 = tree.links.new(tree.nodes[1].outputs[0], alpha_over.inputs[2])
-    link_2 = tree.links.new(alpha_over.outputs[0], tree.nodes[0].inputs[0])
-    alpha_over.inputs[1].default_value = (0.0316, 0.1768, 0.4878, 1.0)
+    alpha_over.inputs[1].default_value = (0.0, 0.0, 0.0, 0.0)
+    alpha_over.location = (400, 300)
+    tree.links.new(tree.nodes[1].outputs[0], alpha_over.inputs[2])
+    tree.links.new(alpha_over.outputs[0], tree.nodes[0].inputs[0])
+    openexr = tree.nodes.new(type='CompositorNodeOutputFile')
+    openexr.format.file_format = 'OPEN_EXR_MULTILAYER'
+    openexr.format.exr_codec = 'ZIP'
+    openexr.format.views_format = 'MULTIVIEW'
+    openexr.format.color_depth = '32'
+    openexr.layer_slots.new('Depth')
+    openexr.base_path = os.path.realpath(args.output)
+    openexr.location = (625, 50)
+    tree.links.new(alpha_over.outputs[0], openexr.inputs[0])
+    tree.links.new(tree.nodes[1].outputs[2], openexr.inputs[1])
     
     # create materials
     materials = []
@@ -182,6 +201,7 @@ def main():
         
     ]
     base_bond = cylinder(8, 0.2, 1.0)
+    atoms_list = []
     bonds_list = []
     for i in range(4):
         # atoms (spheres)
@@ -196,18 +216,11 @@ def main():
             line = xyz_file.readline().strip().split(' ')
             pos = (float(line[1]), float(line[2]), float(line[3]))
             if i < 3 or pos[2] > 8.0: # filter out some of the large white slab
-                
-                if pos[2] > 14.0:
-                    appendModelToMesh(atoms_mesh, base_models_h[i], pos)
-                else:
-                    appendModelToMesh(atoms_mesh, base_models_l[i], pos)
-                """
                 t_pos = (pos[0] * -0.1 + 35.0, pos[1] * 0.1 - 15.0, pos[2] * -0.1 + 5.0) 
                 if (distance2(cam_position, t_pos) < 100.0):
                     appendModelToMesh(atoms_mesh, base_models_h[i], pos)
                 else:
                     appendModelToMesh(atoms_mesh, base_models_l[i], pos)
-                """
                 atom_positions.append(pos)
                 num_atoms_used += 1
         print(f'finished reading XYZ into mesh - using {num_atoms_used} atoms')
@@ -226,80 +239,159 @@ def main():
             atoms.data.materials.append(materials[i])
         if i == 3:
             atoms.visible_shadow = False
+        atoms_list.append(atoms)
         
         # bonds (cylinders)
-        if args.bonds and (i == 0 or i == 2):
-            bond_file = open(input_filename + '.bond', 'r')
-            bond_indices = []
-            num_bonds = int(bond_file.readline().strip())
-            bond_file.readline() # throw away next line
-            for _b in range(num_bonds):
-                line = bond_file.readline().strip().split(' ')
-                bond_indices.append((int(line[0]), int(line[1])))
-            bond_mesh = bpy.data.meshes.new(f'bond_{i}')
-            bonds = bpy.data.objects.new(f'bond_{i}', bond_mesh)
-            bpy.context.collection.objects.link(bonds)
-            mat3_scale = mathutils.Matrix.Identity(3)
-            bonds_mesh = {'vertices': [], 'faces': []}
-            for b in bond_indices:
-                direction = mathutils.Vector(atom_positions[b[1]]) - mathutils.Vector(atom_positions[b[0]])
-                mat3_scale[2][2] = direction.length
-                mat3_rotate = direction.to_track_quat('Z', 'Y').to_matrix()
-                verts = [mat3_rotate @ mat3_scale @ v for v in base_bond['vertices']]
-                appendModelToMesh(bonds_mesh, {'vertices': verts, 'faces': base_bond['faces']}, atom_positions[b[0]])
-            bond_mesh.from_pydata(bonds_mesh['vertices'], [], bonds_mesh['faces'])
-            for poly in bonds.data.polygons:
-                poly.use_smooth = True
-            bonds.scale = (0.1, 0.1, 0.1)
-            bonds.rotation_euler = (0.0, math.radians(180.0), 0.0)
-            bonds.location = (35.0, -15.0, 5.0)
-            if len(bonds.data.materials) > 0:
-                bonds.data.materials[0] = materials[i]
+        if args.bonds:
+            if i == 0 or i == 2:
+                bond_file = open(input_filename + '.bond', 'r')
+                bond_indices = []
+                num_bonds = int(bond_file.readline().strip())
+                bond_file.readline() # throw away next line
+                for _b in range(num_bonds):
+                    line = bond_file.readline().strip().split(' ')
+                    bond_indices.append((int(line[0]), int(line[1])))
+                bond_mesh = bpy.data.meshes.new(f'bond_{i}')
+                bonds = bpy.data.objects.new(f'bond_{i}', bond_mesh)
+                bpy.context.collection.objects.link(bonds)
+                mat3_scale = mathutils.Matrix.Identity(3)
+                bonds_mesh = {'vertices': [], 'faces': []}
+                for b in bond_indices:
+                    direction = mathutils.Vector(atom_positions[b[1]]) - mathutils.Vector(atom_positions[b[0]])
+                    mat3_scale[2][2] = direction.length
+                    mat3_rotate = direction.to_track_quat('Z', 'Y').to_matrix()
+                    verts = [mat3_rotate @ mat3_scale @ v for v in base_bond['vertices']]
+                    appendModelToMesh(bonds_mesh, {'vertices': verts, 'faces': base_bond['faces']}, atom_positions[b[0]])
+                bond_mesh.from_pydata(bonds_mesh['vertices'], [], bonds_mesh['faces'])
+                for poly in bonds.data.polygons:
+                    poly.use_smooth = True
+                bonds.scale = (0.1, 0.1, 0.1)
+                bonds.rotation_euler = (0.0, math.radians(180.0), 0.0)
+                bonds.location = (35.0, -15.0, 5.0)
+                if len(bonds.data.materials) > 0:
+                    bonds.data.materials[0] = materials[i]
+                else:
+                    bonds.data.materials.append(materials[i])
+                bonds_list.append(bonds)
             else:
-                bonds.data.materials.append(materials[i])
-            bonds_list.append(bonds)
-            
-    
-    """
-    # NURBS
-    for atom_id in range(num_atoms):
-        line = xyz_file.readline().strip().split(' ')
-        pos = (float(line[1]), float(line[2]), float(line[3]))
-        bpy.ops.surface.primitive_nurbs_surface_sphere_add(location=pos)
-        if (atom_id % 500) == 0:
-            print(f'{atom_id} / {num_atoms}')
-    """
+                bonds_list.append(None)
 
-    
     # timer checkpoint - finished data loading/processing, about to start rendering
     mid_time = time.time()
-    
+
     # render styles
+    render_times = []
     render_styles = ['atoms', 'atomsbonds']
     if args.render_styles != 'all':
         render_styles = args.render_styles.split(',')
-    """
-    render_times = []
+
+    csv = open('data.csv', 'w')
+    csv.write('Time Step,Camera Position,Bonds,CISVersion,CISImage,CISImageWidth,CISImageHeight,CISLayer,CISChannel,CISChannelVar,CISChannelVarType,FILE\n')
+    time_step = 510
+    cam_pos = 'center'
     for style in render_styles:
         hide_bonds = True
+        bonds_str = 'false'
         if style == 'atomsbonds':
             hide_bonds = False
-        for bond in bonds_list:
-            bond.hide_render = hide_bonds
+            bonds_str = 'true'
         
-        # start render timer
-        render_start = time.time()
+        # each layer
+        cis_img = f'ts{time_step}_{cam_pos}_{style}'
+        mkdir(cis_img)
+        for i in range(4):
+            cis_layer = f'molecule_{(i+1):02d}'
+            csv.write(f'{time_step},{cam_pos},{bonds_str},1.0,{cis_img},{dim_x},{2 * dim_y},{cis_layer},CISColor,rgba,int,{cis_img}/{cis_layer}_RGBA.npz\n')
+            csv.write(f'{time_step},{cam_pos},{bonds_str},1.0,{cis_img},{dim_x},{2 * dim_y},{cis_layer},CISDepth,depth,float,{cis_img}/{cis_layer}_Depth.npz\n')
+            
+            for j in range(4):
+                if i == j:
+                    atoms_list[j].hide_render = False
+                    if bonds_list[j] != None:
+                        bonds_list[j].hide_render = hide_bonds
+                else:
+                    atoms_list[j].hide_render = True
+                    if bonds_list[j] != None:
+                        bonds_list[j].hide_render = True
+                
+            
         
-        # render image JPEG
-        bpy.context.scene.render.image_settings.quality = 92
-        bpy.context.scene.render.image_settings.file_format = 'JPEG'
-        bpy.context.scene.render.filepath = os.path.splitext(os.path.realpath(args.output))[0] + '_' + style + '.jpg'
-        bpy.ops.render.render(write_still=1)
+            # start render timer
+            render_start = time.time()
+            
+            # render image
+            bpy.ops.render.render()
+            
+            # end timer
+            render_end = time.time()
+            render_times.append(secondsToMMSS(render_end - render_start))
         
-        # end timer
-        render_end = time.time()
-        render_times.append(secondsToMMSS(render_end - render_start))
-    """
+            # read openexr to get color and depth
+            exr_filename = f'{os.path.realpath(args.output)}0001.exr'
+            image = OpenEXR.InputFile(exr_filename)
+            channels = {'left': {}, 'right' :{}}
+            for c in channels:
+                red = np.asarray(rgbToSrgb(np.frombuffer(image.channel(f'Image.{c}.R'), np.float16)) * 255, dtype=np.uint8)
+                green = np.asarray(rgbToSrgb(np.frombuffer(image.channel(f'Image.{c}.G'), np.float16)) * 255, dtype=np.uint8)
+                blue = np.asarray(rgbToSrgb(np.frombuffer(image.channel(f'Image.{c}.B'), np.float16)) * 255, dtype=np.uint8)
+                alpha = np.asarray(np.frombuffer(image.channel(f'Image.{c}.A'), np.float16) * 255, dtype=np.uint8)
+                #channels[c]['R'] = red
+                #channels[c]['G'] = green
+                #channels[c]['B'] = blue
+                #channels[c]['A'] = alpha
+                channels[c]['RGBA'] = np.empty(red.size + green.size + blue.size + alpha.size, dtype=np.uint8)
+                channels[c]['RGBA'][0::4] = red
+                channels[c]['RGBA'][1::4] = green
+                channels[c]['RGBA'][2::4] = blue
+                channels[c]['RGBA'][3::4] = alpha
+                channels[c]['Depth'] = np.asarray(np.frombuffer(image.channel(f'Depth.{c}.V'), np.float16), dtype=np.float32)
+            image.close()
+            os.remove(exr_filename)
+            
+            #new_exr_filename = f'{os.path.realpath(args.output)}_part{i:02d}.exr'
+            #if os.path.exists(new_exr_filename):
+            #    os.remove(new_exr_filename)
+            #os.rename(exr_filename, f'{os.path.realpath(args.output)}_part{i:02d}.exr')
+            
+
+            #r2 = np.concatenate((channels['left']['R'], channels['right']['R']))
+            #g2 = np.concatenate((channels['left']['G'], channels['right']['G']))
+            #b2 = np.concatenate((channels['left']['B'], channels['right']['B']))
+            #a2 = np.concatenate((channels['left']['A'], channels['right']['A']))
+            rgba = np.concatenate((channels['left']['RGBA'], channels['right']['RGBA']))
+            depth = np.concatenate((channels['left']['Depth'], channels['right']['Depth']))
+            np.savez_compressed(f'{cis_img}/{cis_layer}_RGBA.npz', rgba=rgba)
+            #np.savez_compressed(f'{cis_img}/{cis_layer}_rgba.npz', r=r2, g=g2, b=b2, a=a2)
+            np.savez_compressed(f'{cis_img}/{cis_layer}_Depth.npz', depth=depth)
+        
+            """
+            rgb = np.delete(rgba, np.arange(3, rgba.size, 4))
+            ppm = open(f'{cis_img}/{cis_layer}.ppm', 'wb')
+            ppm.write(f'P6\n{2 * dim_y} {dim_x}\n255\n'.encode('utf-8'))
+            ppm.write(rgb.tobytes())
+            ppm.close()
+            """
+        
+            process_end = time.time()
+            print(f'process time: {secondsToMMSS(process_end - render_end)}')
+    csv.close()
+    #
+    #                                                                                                    ** this should match npz array name **
+    #                                                                                                    \_________________  _________________/
+    #                                                                                                                      \/
+    # All | Normal | Columns | ... | CISVersion | CISImage | CISImageWidth | CISImageHeight | CISLayer | CISChannel | CISChannelVar | CISChannelVarType | FILE
+    #  -- |     -- |      -- |  -- |        1.0 | image_id |         width |         height | layer_id |   CISColor |          rgba |               int | __RGBA.npz
+    #  -- |     -- |      -- |  -- |        1.0 | image_id |         width |         height | layer_id |     CISRed |             r |               int | __rgba.npz
+    #  -- |     -- |      -- |  -- |        1.0 | image_id |         width |         height | layer_id |   CISGreen |             g |               int | __rgba.npz
+    #  -- |     -- |      -- |  -- |        1.0 | image_id |         width |         height | layer_id |    CISBlue |             b |               int | __rgba.npz
+    #  -- |     -- |      -- |  -- |        1.0 | image_id |         width |         height | layer_id |   CISAlpha |             a |               int | __rgba.npz
+    #  -- |     -- |      -- |  -- |        1.0 | image_id |         width |         height | layer_id |   CISDepth |         depth |             float | __Depth.npz
+    #
+    # VIEWER: Time the following:
+    #  - download
+    #  - unzip and unpack into raw buffers
+    #  - composite image from layers
+    #    
     
     # end timer
     end_time = time.time()
@@ -389,6 +481,18 @@ def appendModelToMesh(mesh, model, pos):
             new_face.append(i + vert_offset)
         mesh['faces'].append(new_face)
 
+
+def rgbToSrgb(channel):
+    gamma = 1.0 / 2.4
+    srgb = np.piecewise(channel, [channel <= 0.0031308, channel > 0.0031308], [lambda c: 12.92 * c, lambda c: 1.055 * (c ** gamma) - 0.055])
+    srgb[srgb>1.0] = 1.0
+    return srgb
+
+
+def mkdir(path):
+    exists = os.path.exists(path)
+    if not exists:
+        os.makedirs(path)
 
 def distance2(p0, p1):
     dx = p1[0] - p0[0]

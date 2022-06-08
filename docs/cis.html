@@ -1,0 +1,556 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="utf-8"/>
+    <meta name="viewport" content="width=device-width, initial-scale=1"/>
+    <meta name='mobile-web-app-capable' content='yes'>
+    <meta name='apple-mobile-web-app-capable' content='yes'>
+    <title>Omnidirectional Stereo Image Viewer</title>
+    <link rel="stylesheet" href="css/style.css"/>
+    <script type="application/javascript" src="js/zip.min.js"></script>
+    <script type="application/javascript" src="js/gl-matrix-min.js"></script>
+    <script type="application/javascript" src="js/glsl.js"></script>
+    <script type="application/javascript" src="js/cdbreader.js"></script>
+    <script type="application/javascript">
+        let cdb;
+        let gl;
+        let composite;
+        let attribs;
+        let plane;
+        let color_texture;
+        let depth_texture;
+        
+        function init() {
+            let canvas = document.getElementById('canvas');
+            canvas.width = window.innerWidth;
+            canvas.height = window.innerHeight - 120;
+            gl = canvas.getContext('webgl2');
+            if (!gl) {
+                alert('Unable to initialize WebGL 2. Your browser may not support it.');
+            }
+            
+            cdb = new CdbReader('/blender-render/MdSuperlubricityCIS.cdb');
+            let cdb_promise = cdb.read();
+            let composite_vs = getFile('shaders/composite.vert');
+            let composite_fs = getFile('shaders/composite.frag');
+            attribs = {vertex_position: 0, vertex_texcoord: 1};
+            Promise.all([cdb_promise, composite_vs, composite_fs])
+            .then((data) => {
+                initializeGui();
+                initializeGlApp(data[1], data[2]);
+            })
+            .catch((error) => {
+                console.log('Error', error);
+            });
+        }
+        
+        function initializeGui() {
+            let i, j;
+            let gui = document.getElementById('gui');
+            for (i = 0; i < cdb.fields.length; i++) {
+                if (cdb.fields[i].type === 'BOOLEAN') {
+                    let elem = document.createElement('input');
+                    elem.id = cdb.fields[i].name;
+                    elem.type = 'checkbox';
+                    elem.checked = false;
+                    elem.addEventListener('change', guiUpdated, false);
+                    let label = document.createElement('label');
+                    label.textContent = cdb.fields[i].name;
+                    let delim = document.createElement('span');
+                    delim.textContent = '|';
+                    delim.style.fontWeight = 'bold';
+                    delim.style.marginLeft = '0.8rem';
+                    delim.style.marginRight = '0.4rem';
+                    gui.appendChild(elem);
+                    gui.appendChild(label);
+                    gui.appendChild(delim);
+                }
+                else if (cdb.fields[i].type === 'SELECT') {
+                    let label = document.createElement('label');
+                    label.textContent = cdb.fields[i].name;
+                    let elem = document.createElement('select');
+                    elem.id = cdb.fields[i].name;
+                    for (j = 0; j < cdb.fields[i].options.length; j++) {
+                        let option = document.createElement('option');
+                        option.value = cdb.fields[i].options[j];
+                        option.text = cdb.fields[i].options[j];
+                        elem.appendChild(option);
+                    }
+                    elem.addEventListener('change', guiUpdated, false);
+                    let delim = document.createElement('span');
+                    delim.textContent = '|';
+                    delim.style.fontWeight = 'bold';
+                    delim.style.marginLeft = '0.8rem';
+                    delim.style.marginRight = '0.4rem';
+                    gui.appendChild(label);
+                    gui.appendChild(elem);
+                    gui.appendChild(delim);
+                }
+                else if (cdb.fields[i].type === 'RANGE') {
+                    let label = document.createElement('label');
+                    label.textContent = cdb.fields[i].name;
+                    let elem = document.createElement('input');
+                    elem.id = cdb.fields[i].name;
+                    elem.type = 'range';
+                    elem.min = cdb.fields[i].min;
+                    elem.max = cdb.fields[i].max;
+                    elem.step = cdb.fields[i].step;
+                    elem.value = cdb.fields[i].min;
+                    let value = document.createElement('label');
+                    value.textContent = elem.value;
+                    elem.addEventListener('input', (event) => {
+                        value.textContent = event.target.value;
+                    }, false);
+                    elem.addEventListener('change', guiUpdated, false);
+                    let delim = document.createElement('span');
+                    delim.textContent = '|';
+                    delim.style.fontWeight = 'bold';
+                    delim.style.marginLeft = '0.8rem';
+                    delim.style.marginRight = '0.4rem';
+                    gui.appendChild(label);
+                    gui.appendChild(elem);
+                    gui.appendChild(value);
+                    gui.appendChild(delim);
+                }
+            }
+            if (cdb.specification === 'CIS') {
+                gui.appendChild(document.createElement('br'));
+                let layers_label = document.createElement('p');
+                layers_label.style.fontWeight = 'bold';
+                layers_label.style.marginTop = '0.2rem';
+                layers_label.textContent = 'Layers';
+                let delim0 = document.createElement('span');
+                delim0.textContent = '|';
+                delim0.style.fontWeight = 'bold';
+                delim0.style.marginLeft = '0.8rem';
+                delim0.style.marginRight = '0.4rem';
+                gui.appendChild(layers_label);
+                gui.appendChild(delim0);
+                for (i = 0; i < cdb.layers.length; i++) {
+                    let elem = document.createElement('input');
+                    elem.id = 'layer' + i;
+                    elem.type = 'checkbox';
+                    elem.checked = (i === 0);
+                    elem.addEventListener('change', updateLayers, false);
+                    let label = document.createElement('label');
+                    label.textContent = cdb.layers[i];
+                    let delim = document.createElement('span');
+                    delim.textContent = '|';
+                    delim.style.fontWeight = 'bold';
+                    delim.style.marginLeft = '0.8rem';
+                    delim.style.marginRight = '0.4rem';
+                    gui.appendChild(elem);
+                    gui.appendChild(label);
+                    gui.appendChild(delim);
+                }
+            }
+        }
+        
+        function initializeGlApp(vert_src, frag_src) {
+            // set drawing area to be the entire framebuffer
+            gl.viewport(0, 0, gl.drawingBufferWidth, gl.drawingBufferHeight);
+            // set the background color
+            gl.clearColor(0.0, 0.0, 0.0, 1.0);
+            // enable z-buffer for visible surface determination
+            gl.enable(gl.DEPTH_TEST);
+            // enable alpha blending
+            gl.enable(gl.BLEND);
+            gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA);
+            
+            // create composite shader
+            composite = createShaderProgram(vert_src, frag_src);
+            gl.useProgram(composite.program);
+            
+            // set background color as uniform
+            gl.uniform4fv(composite.uniforms['background'], new Float32Array([0.208, 0.455, 0.722, 1.0]));
+            
+            // create fullscreen quad model
+            plane = createPlaneVertexArray(gl, attribs.vertex_position, attribs.vertex_texcoord);
+            
+            // check number of layers (max of 32 supported)
+            let num_layers = Math.min(cdb.layers.length, 32);
+            gl.uniform1i(composite.uniforms['num_layers'], 1);
+            gl.uniform1iv(composite.uniforms['layer_idx[0]'], new Int32Array([0]));
+
+            // create color texture array
+            color_texture = gl.createTexture();
+            gl.bindTexture(gl.TEXTURE_2D_ARRAY, color_texture);
+            gl.texStorage3D(gl.TEXTURE_2D_ARRAY, 1, gl.RGBA8, cdb.data[0].CISImageWidth, cdb.data[0].CISImageHeight, num_layers);
+            gl.texParameteri(gl.TEXTURE_2D_ARRAY, gl.TEXTURE_MIN_FILTER, gl.NEAREST);
+            gl.texParameteri(gl.TEXTURE_2D_ARRAY, gl.TEXTURE_MAG_FILTER, gl.NEAREST);
+            gl.texParameteri(gl.TEXTURE_2D_ARRAY, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
+            gl.texParameteri(gl.TEXTURE_2D_ARRAY, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+            // upload image data - temporary 1 layer
+            let texels_color0 = new Uint8Array(cdb.data[0].CISImageWidth * cdb.data[0].CISImageHeight * 4);
+            gl.texSubImage3D(gl.TEXTURE_2D_ARRAY, 0, 0, 0, 0, cdb.data[0].CISImageWidth, cdb.data[0].CISImageHeight, 1, gl.RGBA, gl.UNSIGNED_BYTE, texels_color0);
+            
+            // create depth texture array
+            depth_texture = gl.createTexture();
+            gl.bindTexture(gl.TEXTURE_2D_ARRAY, depth_texture);
+            gl.texStorage3D(gl.TEXTURE_2D_ARRAY, 1, gl.R32F, cdb.data[0].CISImageWidth, cdb.data[0].CISImageHeight, num_layers);
+            gl.texParameteri(gl.TEXTURE_2D_ARRAY, gl.TEXTURE_MIN_FILTER, gl.NEAREST);
+            gl.texParameteri(gl.TEXTURE_2D_ARRAY, gl.TEXTURE_MAG_FILTER, gl.NEAREST);
+            gl.texParameteri(gl.TEXTURE_2D_ARRAY, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
+            gl.texParameteri(gl.TEXTURE_2D_ARRAY, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+            // upload image data - temporary 1 layer
+            let texels_depth0 = new Float32Array(cdb.data[0].CISImageWidth * cdb.data[0].CISImageHeight);
+            gl.texSubImage3D(gl.TEXTURE_2D_ARRAY, 0, 0, 0, 0, cdb.data[0].CISImageWidth, cdb.data[0].CISImageHeight, 1, gl.RED, gl.FLOAT, texels_depth0);
+
+            // deselect texture
+            gl.bindTexture(gl.TEXTURE_2D_ARRAY, null);
+            
+            // update textures with first image in db
+            updateTextures(cdb.data[0].CISImage)
+            .then(() => {
+                window.requestAnimationFrame((timestamp) => {
+                    render();
+                });
+            })
+            .catch((error) => {
+                console.log('Error:', error);
+            });
+            
+            // render scene
+            render();
+        }
+        
+        function render() {
+            // clear previous frame
+            gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
+             
+            // draw fullscreen quad
+            gl.activeTexture(gl.TEXTURE0);
+            gl.bindTexture(gl.TEXTURE_2D_ARRAY, color_texture);
+            gl.uniform1i(composite.uniforms['color'], 0);
+            gl.activeTexture(gl.TEXTURE1);
+            gl.bindTexture(gl.TEXTURE_2D_ARRAY, depth_texture);
+            gl.uniform1i(composite.uniforms['depth'], 1);
+            
+            gl.bindVertexArray(plane);
+            gl.drawElements(gl.TRIANGLES, plane.face_index_count, gl.UNSIGNED_SHORT, 0);
+            gl.bindVertexArray(null);
+        }
+        
+        function guiUpdated() {
+            let i;
+            let image_vals = {};
+            for (i = 0; i < cdb.fields.length; i++) {
+                if (cdb.fields[i].type === 'BOOLEAN') {
+                    let elem = document.getElementById(cdb.fields[i].name);
+                    image_vals[cdb.fields[i].name] = elem.checked;
+                }
+                else if (cdb.fields[i].type === 'SELECT') {
+                    let elem = document.getElementById(cdb.fields[i].name);
+                    image_vals[cdb.fields[i].name] = elem.value
+                }
+                else if (cdb.fields[i].type === 'RANGE') {
+                    let elem = document.getElementById(cdb.fields[i].name);
+                    image_vals[cdb.fields[i].name] = parseInt(elem.value, 10);
+                }
+            }
+            
+            let image_id = cdb.getRow(image_vals).CISImage;
+            updateTextures(image_id)
+            .then(() => {
+                window.requestAnimationFrame((timestamp) => {
+                    render();
+                });
+            })
+            .catch((error) => {
+                console.log('Error:', error);
+            });
+        }
+        
+        function getNpzData(url) {
+            return new Promise((resolve, reject) => {
+                let reader;
+                getBinaryFile(url)
+                .then((npz_data) => {
+                    let npz = new Uint8Array(npz_data);
+                    reader = new zip.ZipReader(new zip.Uint8ArrayReader(npz));
+                    return reader.getEntries();
+                })
+                .then((entries) => {
+                    let i;
+                    let deflate = [];
+                    for (i = 0; i < entries.length; i++) {
+                        deflate.push(entries[i].filename);
+                        deflate.push(entries[i].getData(new zip.Uint8ArrayWriter()));
+                    }
+                    return Promise.all(deflate);
+                })
+                .then((data) => {
+                    let i, j;
+                    let result = {}
+                    for (i = 0; i < data.length; i+=2) {
+                        let filename = data[i];
+                        let npy = data[i + 1];
+                        let header_length = readUint16(npy, 8);
+                        let header = pythonDictToJson(readString(npy, 10, header_length));
+                        let data_size = 1;
+                        for (j = 0; j < header.shape.length; j++) {
+                            data_size *= header.shape[j];
+                        }
+                        let buffer;
+                        if (header.descr === '|u1') {
+                            buffer = new Uint8Array(npy.buffer.slice(10 + header_length, 10 + header_length + data_size));
+                        }
+                        else if (header.descr === '<f4') {
+                            buffer = new Float32Array(npy.buffer.slice(10 + header_length, 10 + header_length + (4 * data_size)));
+                        }
+                        result[filename] = buffer;
+                    }
+                    reader.close();
+                    resolve(result);
+                });
+            });
+        }
+        
+        function updateTextures(image_id) {
+            return new Promise((resolve, reject) => {
+                let start = performance.now();
+                
+                let i;
+                let images = cdb.getRows({CISImage: image_id});
+                let layer_ids = {};
+                let curr_layer = 0;
+                for (i = 0; i < images.length; i++) {
+                    if (!layer_ids.hasOwnProperty(images[i].CISLayer)) {
+                        layer_ids[images[i].CISLayer] = curr_layer;
+                        curr_layer++;
+                    }
+                }
+                let npz_download = [];
+                for (i = 0; i < images.length; i++) {
+                    npz_download.push(getNpzData(cdb.url + '/' + images[i].FILE));
+                }
+                Promise.all(npz_download)
+                .then((image_data) => {
+                    let mid = performance.now();
+                    
+                    let img_w = cdb.data[0].CISImageWidth;
+                    let img_h = cdb.data[0].CISImageHeight
+                    for (i = 0; i < images.length; i++) {
+                        if (images[i].CISChannel === 'CISColor') {
+                            gl.bindTexture(gl.TEXTURE_2D_ARRAY, color_texture);
+                            let layer = layer_ids[images[i].CISLayer];
+                            gl.texSubImage3D(gl.TEXTURE_2D_ARRAY, 0, 0, 0, layer, img_w, img_h, 1, gl.RGBA, gl.UNSIGNED_BYTE, 
+                                             image_data[i][images[i].CISChannelVar + '.npy']);
+                        }
+                        else if (images[i].CISChannel === 'CISDepth') {
+                            gl.bindTexture(gl.TEXTURE_2D_ARRAY, depth_texture);
+                            let layer = layer_ids[images[i].CISLayer];
+                            gl.texSubImage3D(gl.TEXTURE_2D_ARRAY, 0, 0, 0, layer, img_w, img_h, 1, gl.RED, gl.FLOAT, 
+                                             image_data[i][images[i].CISChannelVar + '.npy']);
+                        }
+                    }
+                    gl.bindTexture(gl.TEXTURE_2D_ARRAY, null);
+                    updateLayers();
+                    gl.finish();
+                    
+                    let end = performance.now();
+                    console.log((mid - start).toFixed(1) + 'ms', (end - mid).toFixed(1) + 'ms');
+                    
+                    resolve();
+                })
+                .catch((error) => {
+                    reject(error);
+                });
+            });
+        }
+        
+        function updateLayers() {
+            let i;
+            let layers = [];
+            for (i = 0; i < cdb.layers.length; i++) {
+                let check = document.getElementById('layer' + i);
+                if (check.checked) {
+                    layers.push(i);
+                }
+            }
+            gl.uniform1i(composite.uniforms['num_layers'], layers.length);
+            gl.uniform1iv(composite.uniforms['layer_idx[0]'], new Int32Array(layers));
+            
+            window.requestAnimationFrame((timestamp) => {
+                render();
+            });
+        }
+        
+        function createShaderProgram(vert_source, frag_source) {
+            // compile shader program
+            let program = glslCreateShaderProgram(gl, vert_source, frag_source);
+
+            // bind vertex input data locations
+            gl.bindAttribLocation(program, attribs.vertex_position, 'vertex_position');
+            gl.bindAttribLocation(program, attribs.vertex_texcoord, 'vertex_texcoord');
+
+            // Link shader program
+            glslLinkShaderProgram(gl, program);
+
+            // Get list of uniforms available in shaders
+            let uniforms = glslGetShaderProgramUniforms(gl, program);
+            
+            return {program: program, uniforms: uniforms};
+        }
+        
+        function createPlaneVertexArray(gl, position_attrib, texcoord_attrib) {
+            // create a new Vertex Array Object
+            let vertex_array = gl.createVertexArray();
+            // set newly created Vertex Array Object as the active one we are modifying
+            gl.bindVertexArray(vertex_array);
+
+            
+            // create buffer to store vertex positions (3D points)
+            let vertex_position_buffer = gl.createBuffer();
+            // set newly created buffer as the active one we are modifying
+            gl.bindBuffer(gl.ARRAY_BUFFER, vertex_position_buffer);
+            // create array of 3D vertex values (each set of 3 values specifies a vertex: x, y, z)
+            let vertices = [
+                -1.0, -1.0, 0.0,
+                 1.0, -1.0, 0.0,
+                 1.0,  1.0, 0.0,
+                -1.0,  1.0, 0.0
+            ];
+            // store array of vertex positions in the vertex_position_buffer
+            gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(vertices), gl.STATIC_DRAW);
+            // enable position_attrib in our GPU program
+            gl.enableVertexAttribArray(position_attrib);
+            // attach vertex_position_buffer to the position_attrib
+            // (as 3-component floating point values)
+            gl.vertexAttribPointer(position_attrib, 3, gl.FLOAT, false, 0, 0);
+
+
+            // create buffer to store texture coordinate (2D coordinates for mapping images to the surface)
+            let vertex_texcoord_buffer = gl.createBuffer();
+            // set newly created buffer as the active one we are modifying
+            gl.bindBuffer(gl.ARRAY_BUFFER, vertex_texcoord_buffer);
+            // create array of 2D texture coordinate values (each set of 2 values specifies texture coordinate: u, v)
+            let texcoords = [
+                0.0,  0.5,//1.0,
+                1.0,  0.5,//1.0,
+                1.0,  0.0,
+                0.0,  0.0
+            ];
+            // store array of vertex texture coordinates in the vertex_texcoord_buffer
+            gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(texcoords), gl.STATIC_DRAW);
+            // enable texcoord_attrib in our GPU program
+            gl.enableVertexAttribArray(texcoord_attrib);
+            // attach vertex_texcoord_buffer to the texcoord_attrib
+            // (as 2-component floating point values)
+            gl.vertexAttribPointer(texcoord_attrib, 2, gl.FLOAT, false, 0, 0);
+
+            
+            // create buffer to store faces of the triangle
+            let vertex_index_buffer = gl.createBuffer();
+            // set newly created buffer as the active one we are modifying
+            gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, vertex_index_buffer);
+            // create array of vertex indices (each set of 3 represents a triangle)
+            let indices = [
+                0, 1, 2,
+                0, 2, 3,
+            ];
+            // store array of vertex indices in the vertex_index_buffer
+            gl.bufferData(gl.ELEMENT_ARRAY_BUFFER, new Uint16Array(indices), gl.STATIC_DRAW);
+
+
+            // no longer modifying our Vertex Array Object, so deselect
+            gl.bindVertexArray(null);
+
+
+            // store the number of vertices used for entire model (number of faces * 3)
+            vertex_array.face_index_count = indices.length;
+
+
+            // return created Vertex Array Object
+            return vertex_array;
+        }
+        
+        function readUint16(buffer, offset) {
+            let value = buffer[offset];
+            value |= buffer[offset + 1] << 8;
+            return value >>> 0;
+        }
+        
+        function readUint32(buffer, offset) {
+            let value = buffer[offset];
+            value |= buffer[offset + 1] << 8;
+            value |= buffer[offset + 2] << 16;
+            value |= buffer[offset + 3] << 24;
+            return value >>> 0;
+        }
+        
+        function readString(buffer, offset, length) {
+            let i;
+            let value = ''
+            for (i = offset; i < offset + length; i++) {
+                value += String.fromCharCode(buffer[i]);
+            }
+            return value;
+        }
+        
+        function pythonDictToJson(py_dict) {
+            let d = py_dict.replace(/'/g, '"');
+            d = d.replace(/\(/g, '[');
+            d = d.replace(/\)/g, ']');
+            d = d.replace(/True/g, 'true');
+            d = d.replace(/False/g, 'false');
+            d = d.replace(/None/g, 'null');
+            d = d.replace(/\,(?=\s*?[\}\]])/g, '');
+            return JSON.parse(d);
+        }
+        
+        function  getFile(address) {
+            return new Promise((resolve, reject) => {
+                let req = new XMLHttpRequest();
+                req.onreadystatechange = () => {
+                    if (req.readyState === 4 && req.status === 200) {
+                        resolve(req.response);
+                    }
+                    else if (req.readyState === 4) {
+                        reject({url: req.responseURL, status: req.status});
+                    }
+                };
+                req.open('GET', address, true);
+                req.send();
+            });
+        }
+        
+        function getBinaryFile(address) {
+            return new Promise((resolve, reject) => {
+                let req = new XMLHttpRequest();
+                req.onreadystatechange = () => {
+                    if (req.readyState === 4 && req.status === 200) {
+                        resolve(req.response);
+                    }
+                    else if (req.readyState === 4) {
+                        reject({url: req.responseURL, status: req.status});
+                    }
+                };
+                req.open('GET', address, true);
+                req.responseType = 'arraybuffer';
+                req.send();
+            });
+        }
+    </script>
+</head>
+<body onload="init()">
+    <!--
+    <div id="lightbox">
+        <div id="cdb-inputcontainer">
+            <h1>Cinema ODS Database</h1>
+            <label>URL:</label><input id="cdb-inputtext" type="text" placeholder="address of .cdb folder" /><br />
+            <button type="button" onclick="selectCinemaDatabase()">Load</button>
+        </div>
+    </div>
+    -->
+    <div id="instructions">
+        <h1>Instructions</h1>
+        <p>Click on the VR Headset icon in the bottom-right to enter immersive mode. If this icon is not shown, your device does not support virtual reality for this application.</p>
+    </div>
+    <canvas id="canvas" touch-action="none"></canvas>
+    <div id="gui">
+        <p style="font-weight: bold;">GUI</p>
+        <span style="font-weight: bold; margin-left: 0.8rem; margin-right: 0.4rem;"> | </span>
+    </div>
+</body>
+</html>

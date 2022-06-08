@@ -18,9 +18,10 @@ p {
     margin-bottom: 0.2rem;
 }
 
-label, input {
+label, input, select {
     font-size: 1rem;
     margin-bottom: 0.4rem;
+    margin-left: 0.4rem;
 }
 
 button {
