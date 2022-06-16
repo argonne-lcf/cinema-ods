@@ -3,13 +3,17 @@
 precision mediump float;
 precision highp sampler2DArray;
 
+#define FLT_MAX 3.402823466e+38
+
 in vec2 texcoord;
 
-uniform int num_layers;
-uniform int layer_idx[32];
-uniform vec4 background;
-uniform sampler2DArray color;
-uniform sampler2DArray depth;
+uniform vec2 resolution;         // overall image resolution
+uniform int num_layers;          // total number of layers
+uniform int layer_idx[32];       // array of layer indices that are visibile
+uniform vec4 background;         // background color
+uniform sampler2DArray color;    // array of 2D rgba layers (textures)
+uniform sampler2DArray depth;    // array of 2D depth layers (textures)
+uniform vec4 bbox[32];           // bounding box of each layer (x_min, y_min, x_max, y_max)
 
 out vec4 FragColor;
 
@@ -20,8 +24,15 @@ void main() {
     
     // sample all layers to get colors and depths
     for (i = 0; i < num_layers; i++) {
-        layer_color[i] = texture(color, vec3(texcoord, layer_idx[i]));
-        layer_depth[i] = texture(depth, vec3(texcoord, layer_idx[i])).r;
+        vec2 pixel = texcoord * resolution;
+        if (pixel.x < bbox[layer_idx[i]].x || pixel.x > bbox[layer_idx[i]].z || pixel.y < bbox[layer_idx[i]].y || pixel.y > bbox[layer_idx[i]].w) {
+            layer_color[i] = vec4(0.0, 0.0, 0.0, 0.0);
+            layer_depth[i] = FLT_MAX;
+        }
+        else {
+            layer_color[i] = texture(color, vec3(texcoord, layer_idx[i]));
+            layer_depth[i] = texture(depth, vec3(texcoord, layer_idx[i])).r;
+        }
     }
     
     // sort by depth (furthest to closest)

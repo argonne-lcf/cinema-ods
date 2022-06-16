@@ -12,6 +12,7 @@ sys.path.append('C:\Program Files\Python39\Lib\site-packages')
 
 import numpy as np
 import OpenEXR
+from PIL import Image
 
 
 def main():
@@ -286,7 +287,8 @@ def main():
         render_styles = args.render_styles.split(',')
 
     csv = open('data.csv', 'w')
-    csv.write('Time Step,Camera Position,Bonds,CISVersion,CISImage,CISImageWidth,CISImageHeight,CISLayer,CISChannel,CISChannelVar,CISChannelVarType,FILE\n')
+    csv.write('Time Step,Camera Position,Bonds,CISVersion,CISImage,CISImageWidth,CISImageHeight,CISLayer,CISLayerOffsetX,'
+              'CISLayerOffsetY,CISLayerWidth,CISLayerHeight,CISChannel,CISChannelVar,CISChannelVarType,FILE\n')
     time_step = 510
     cam_pos = 'center'
     for style in render_styles:
@@ -301,8 +303,8 @@ def main():
         mkdir(cis_img)
         for i in range(4):
             cis_layer = f'molecule_{(i+1):02d}'
-            csv.write(f'{time_step},{cam_pos},{bonds_str},1.0,{cis_img},{dim_x},{2 * dim_y},{cis_layer},CISColor,rgba,int,{cis_img}/{cis_layer}_RGBA.npz\n')
-            csv.write(f'{time_step},{cam_pos},{bonds_str},1.0,{cis_img},{dim_x},{2 * dim_y},{cis_layer},CISDepth,depth,float,{cis_img}/{cis_layer}_Depth.npz\n')
+            #csv.write(f'{time_step},{cam_pos},{bonds_str},1.0,{cis_img},{dim_x},{2 * dim_y},{cis_layer},CISColor,rgba,int,{cis_img}/{cis_layer}_RGBA.npz\n')
+            #csv.write(f'{time_step},{cam_pos},{bonds_str},1.0,{cis_img},{dim_x},{2 * dim_y},{cis_layer},CISDepth,depth,float,{cis_img}/{cis_layer}_Depth.npz\n')
             
             for j in range(4):
                 if i == j:
@@ -331,10 +333,10 @@ def main():
             image = OpenEXR.InputFile(exr_filename)
             channels = {'left': {}, 'right' :{}}
             for c in channels:
-                red = np.asarray(rgbToSrgb(np.frombuffer(image.channel(f'Image.{c}.R'), np.float16)) * 255, dtype=np.uint8)
-                green = np.asarray(rgbToSrgb(np.frombuffer(image.channel(f'Image.{c}.G'), np.float16)) * 255, dtype=np.uint8)
-                blue = np.asarray(rgbToSrgb(np.frombuffer(image.channel(f'Image.{c}.B'), np.float16)) * 255, dtype=np.uint8)
-                alpha = np.asarray(np.frombuffer(image.channel(f'Image.{c}.A'), np.float16) * 255, dtype=np.uint8)
+                red = np.asarray(rgbToSrgb(np.frombuffer(image.channel(f'Image.{c}.R'), np.float32)) * 255, dtype=np.uint8)
+                green = np.asarray(rgbToSrgb(np.frombuffer(image.channel(f'Image.{c}.G'), np.float32)) * 255, dtype=np.uint8)
+                blue = np.asarray(rgbToSrgb(np.frombuffer(image.channel(f'Image.{c}.B'), np.float32)) * 255, dtype=np.uint8)
+                alpha = np.asarray(np.frombuffer(image.channel(f'Image.{c}.A'), np.float32) * 255, dtype=np.uint8)
                 #channels[c]['R'] = red
                 #channels[c]['G'] = green
                 #channels[c]['B'] = blue
@@ -344,7 +346,8 @@ def main():
                 channels[c]['RGBA'][1::4] = green
                 channels[c]['RGBA'][2::4] = blue
                 channels[c]['RGBA'][3::4] = alpha
-                channels[c]['Depth'] = np.asarray(np.frombuffer(image.channel(f'Depth.{c}.V'), np.float16), dtype=np.float32)
+                #channels[c]['Depth'] = np.asarray(np.frombuffer(image.channel(f'Depth.{c}.V'), np.float16), dtype=np.float32)
+                channels[c]['Depth'] = np.frombuffer(image.channel(f'Depth.{c}.V'), np.float32)
             image.close()
             os.remove(exr_filename)
             
@@ -358,11 +361,57 @@ def main():
             #g2 = np.concatenate((channels['left']['G'], channels['right']['G']))
             #b2 = np.concatenate((channels['left']['B'], channels['right']['B']))
             #a2 = np.concatenate((channels['left']['A'], channels['right']['A']))
-            rgba = np.concatenate((channels['left']['RGBA'], channels['right']['RGBA']))
-            depth = np.concatenate((channels['left']['Depth'], channels['right']['Depth']))
-            np.savez_compressed(f'{cis_img}/{cis_layer}_RGBA.npz', rgba=rgba)
+            #rgba = np.concatenate((channels['left']['RGBA'], channels['right']['RGBA']))
+            #depth = np.concatenate((channels['left']['Depth'], channels['right']['Depth']))
+            #np.savez_compressed(f'{cis_img}/{cis_layer}_RGBA.npz', rgba=rgba)
             #np.savez_compressed(f'{cis_img}/{cis_layer}_rgba.npz', r=r2, g=g2, b=b2, a=a2)
-            np.savez_compressed(f'{cis_img}/{cis_layer}_Depth.npz', depth=depth)
+            #np.savez_compressed(f'{cis_img}/{cis_layer}_Depth.npz', depth=depth)
+            
+            #rgba_img = np.reshape(rgba, (2 * dim_y, dim_x, 4))
+            #rgba_webp = Image.fromarray(rgba_img, mode='RGBA')
+            #rgba_webp.save(f'{cis_img}/{cis_layer}_RGBA.webp', format='WebP', lossless=False, quality=85, method=6)
+            
+            rgba = np.reshape(np.concatenate((channels['left']['RGBA'], channels['right']['RGBA'])), (2 * dim_y, dim_x, 4))
+            depth = np.reshape(np.concatenate((channels['left']['Depth'], channels['right']['Depth'])), (2 * dim_y, dim_x, 1))
+            rgba, depth, bounds = cropToContent(rgba, depth, cam_data.clip_end + 0.001)
+            print(f'molecule_{(i+1):02d} image bounds {bounds}')
+            
+            csv.write(f'{time_step},{cam_pos},{bonds_str},1.0,{cis_img},{dim_x},{2 * dim_y},{cis_layer},{bounds[0]},{bounds[1]},'
+                      f'{bounds[2]-bounds[0]+1},{bounds[3]-bounds[1]+1},CISColor,rgba,int,{cis_img}/{cis_layer}_RGBA.npz\n')
+            csv.write(f'{time_step},{cam_pos},{bonds_str},1.0,{cis_img},{dim_x},{2 * dim_y},{cis_layer},{bounds[0]},{bounds[1]},'
+                      f'{bounds[2]-bounds[0]+1},{bounds[3]-bounds[1]+1},CISDepth,depth,float,{cis_img}/{cis_layer}_Depth.npz\n')
+
+            rgba_webp = Image.fromarray(rgba, mode='RGBA')
+            rgba_webp.save(f'{cis_img}/{cis_layer}_RGBA.webp', format='WebP', lossless=False, quality=85, method=6)
+            np.savez_compressed(f'{cis_img}/{cis_layer}_RGBA.npz', rgba=rgba.flatten())
+            np.savez_compressed(f'{cis_img}/{cis_layer}_Depth.npz', depth=depth.flatten())
+            
+            
+            # near = cam_data.clip_start
+            # far = cam_data.clip_end
+            #
+            #           (1/depth) - (1 / near)
+            # f_depth = ----------------------
+            #             (1/far) - (1/near)
+            #
+            #
+            # o_depth = 
+            #
+            
+            #near = cam_data.clip_start
+            #far = cam_data.clip_end
+            #depth_u16 = np.copy(depth);
+            #depth_u16 = np.piecewise(depth_u16, [depth_u16 < far, depth_u16 > far], [lambda d: ((1.0/d) - (1.0/near)) / ((1.0/far) - (1.0/near)), lambda d: 1.0])
+            #depth_u16 *= 65535.0
+            
+            #depth_buffer = np.asarray(depth_u16, dtype=np.uint16).tobytes()
+            #depth_png = Image.new('I', (2 * dim_y, dim_x))
+            #depth_png.frombytes(depth_buffer, 'raw', 'I;16')
+            #depth_png.save(f'{cis_img}/{cis_layer}_Depth.png', format='PNG', optimize=True)
+            
+            #depth_img = np.reshape(depth.view('|u1'), (2 * dim_y, dim_x, 4))
+            #depth_webp = Image.fromarray(depth_img, mode='RGBA')
+            #depth_webp.save(f'{cis_img}/{cis_layer}_Depth.webp', format='WebP', lossless=True, quality=100, method=6)
         
             """
             rgb = np.delete(rgba, np.arange(3, rgba.size, 4))
@@ -488,6 +537,29 @@ def rgbToSrgb(channel):
     srgb[srgb>1.0] = 1.0
     return srgb
 
+
+def cropToContent(rgba, depth, max_depth):
+    width = rgba.shape[1]
+    height = rgba.shape[0]
+    
+    min_x = width
+    min_y = height
+    max_x = -1
+    max_y = -1
+    for y in range(height):
+        for x in range(width):
+            if depth[y][x][0] <= max_depth:
+                if x < min_x:
+                    min_x = x
+                if x > max_x:
+                    max_x = x
+                if y < min_y:
+                    min_y = y
+                if y > max_y:
+                    max_y = y
+    bounds = (min_x, min_y, max_x, max_y)
+    return rgba[min_y:max_y+1,min_x:max_x+1,:], depth[min_y:max_y+1,min_x:max_x+1,:], bounds
+    
 
 def mkdir(path):
     exists = os.path.exists(path)

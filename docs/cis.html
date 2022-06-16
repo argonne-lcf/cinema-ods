@@ -8,6 +8,8 @@
     <title>Omnidirectional Stereo Image Viewer</title>
     <link rel="stylesheet" href="css/style.css"/>
     <script type="application/javascript" src="js/zip.min.js"></script>
+    <script type="application/javascript" src="js/jszip.min.js"></script>
+    <script type="application/javascript" src="js/UZIP.js"></script>
     <script type="application/javascript" src="js/gl-matrix-min.js"></script>
     <script type="application/javascript" src="js/glsl.js"></script>
     <script type="application/javascript" src="js/cdbreader.js"></script>
@@ -29,7 +31,7 @@
                 alert('Unable to initialize WebGL 2. Your browser may not support it.');
             }
             
-            cdb = new CdbReader('/blender-render/MdSuperlubricityCIS.cdb');
+            cdb = new CdbReader('/blender-render/MdSuperlubricityCIS2.cdb');
             let cdb_promise = cdb.read();
             let composite_vs = getFile('shaders/composite.vert');
             let composite_fs = getFile('shaders/composite.frag');
@@ -171,6 +173,9 @@
             let num_layers = Math.min(cdb.layers.length, 32);
             gl.uniform1i(composite.uniforms['num_layers'], 1);
             gl.uniform1iv(composite.uniforms['layer_idx[0]'], new Int32Array([0]));
+            let img_w = cdb.data[0].CISImageWidth;
+            let img_h = cdb.data[0].CISImageHeight;
+            gl.uniform2fv(composite.uniforms['resolution'], new Float32Array([img_w, img_h]));
 
             // create color texture array
             color_texture = gl.createTexture();
@@ -263,14 +268,98 @@
         
         function getNpzData(url) {
             return new Promise((resolve, reject) => {
+                let start = performance.now();
+                let download, loadzip;
+                
+                /*
+                // UZIP.js
+                getBinaryFile(url)
+                .then((npz_data) => {
+                    download = performance.now();
+                    console.log('NPZ download: ' + (download - start).toFixed(1) + 'ms');
+                    
+                    if ( "CompressionStream" in window ) {
+                        console.log('yay');
+                    }
+                    
+                    //data = UZIP.parse(npz_data);
+                    
+                    //let inflated = performance.now()
+                    //console.log('NPZ inflate: ' + (inflated - download).toFixed(1) + 'ms');
+                    
+                    //console.log(data);
+                })
+                */
+                
+                // jszip.js
+                getBinaryFile(url)
+                .then((npz_data) => {
+                    download = performance.now();
+                    console.log('NPZ download: ' + (download - start).toFixed(1) + 'ms');
+                    
+                    let new_zip = new JSZip();
+                    return new_zip.loadAsync(npz_data);
+                })
+                .then((zip) => {
+                    loadzip = performance.now();
+                    console.log('NPZ load: ' + (loadzip - download).toFixed(1) + 'ms');
+
+                    let entry;
+                    let inflate = [];
+                    for (entry in zip.files) {
+                        inflate.push(entry);
+                        inflate.push(zip.file(entry).async('uint8array'));
+                    }
+                    return Promise.all(inflate);
+                })
+                .then((data) => {
+                    let inflated = performance.now()
+                    console.log('NPZ inflate: ' + (inflated - loadzip).toFixed(1) + 'ms');
+                    
+                    let i, j;
+                    let result = {}
+                    for (i = 0; i < data.length; i+=2) {
+                        let filename = data[i];
+                        let npy = data[i + 1];
+                        let header_length = readUint16(npy, 8);
+                        let header = pythonDictToJson(readString(npy, 10, header_length));
+                        let data_size = 1;
+                        for (j = 0; j < header.shape.length; j++) {
+                            data_size *= header.shape[j];
+                        }
+                        let buffer;
+                        if (header.descr === '|u1') {
+                            buffer = new Uint8Array(npy.buffer.slice(10 + header_length, 10 + header_length + data_size));
+                        }
+                        else if (header.descr === '<f4') {
+                            buffer = new Float32Array(npy.buffer.slice(10 + header_length, 10 + header_length + (4 * data_size)));
+                        }
+                        result[filename] = buffer;
+                    }
+                    
+                    console.log('NPZ parse: ' + (performance.now() - inflated).toFixed(1) + 'ms');
+                    resolve(result);
+                })
+                .catch((error) => {
+                    reject(error);
+                });
+                
+                /*
+                // zip.js
                 let reader;
                 getBinaryFile(url)
                 .then((npz_data) => {
+                    download = performance.now();
+                    console.log('NPZ download: ' + (download - start).toFixed(1) + 'ms');
+                    
                     let npz = new Uint8Array(npz_data);
                     reader = new zip.ZipReader(new zip.Uint8ArrayReader(npz));
                     return reader.getEntries();
                 })
                 .then((entries) => {
+                    readzip = performance.now();
+                    console.log('NPZ read: ' + (readzip - download).toFixed(1) + 'ms');
+                    
                     let i;
                     let deflate = [];
                     for (i = 0; i < entries.length; i++) {
@@ -280,6 +369,9 @@
                     return Promise.all(deflate);
                 })
                 .then((data) => {
+                    let deflated = performance.now()
+                    console.log('NPZ deflate: ' + (deflated - readzip).toFixed(1) + 'ms');
+                    
                     let i, j;
                     let result = {}
                     for (i = 0; i < data.length; i+=2) {
@@ -301,8 +393,32 @@
                         result[filename] = buffer;
                     }
                     reader.close();
+                    
+                    console.log('NPZ parse: ' + (performance.now() - deflated).toFixed(1) + 'ms');
                     resolve(result);
                 });
+                */
+            });
+        }
+        
+        function getImageData(url) {
+            return new Promise((resolve, reject) => { 
+                let image = new Image();
+                image.crossOrigin = 'anonymous';
+                let start = performance.now();
+                image.addEventListener('load', (event) => {
+                    let download = performance.now();
+                    console.log('IMG download: ' + (download - start).toFixed(1) + 'ms');
+                    //let canvas = document.createElement('canvas');
+                    //canvas.width = image.naturalWidth;
+                    //canvas.height = image.naturalHeight;
+                    //let ctx = canvas.getContext('2d');
+                    //ctx.drawImage(image, 0, 0);
+                    //console.log('IMG extract data: ' + (performance.now() - download).toFixed(1) + 'ms');
+                    //resolve(ctx.getImageData(0,0, canvas.width, canvas.height).data);
+                    resolve(image);
+                }, false);
+                image.src = url;
             });
         }
         
@@ -320,31 +436,48 @@
                         curr_layer++;
                     }
                 }
-                let npz_download = [];
+                let img_download = [];
                 for (i = 0; i < images.length; i++) {
-                    npz_download.push(getNpzData(cdb.url + '/' + images[i].FILE));
+                    let ext = images[i].FILE.substr(images[i].FILE.lastIndexOf('.') + 1).toLowerCase();
+                    if (ext === 'npz') {
+                        img_download.push(getNpzData(cdb.url + '/' + images[i].FILE));
+                    }
+                    else if (ext === 'png' || ext === 'jpg' || ext === 'jpeg' || ext === 'webp') {
+                        img_download.push(getImageData(cdb.url + '/' + images[i].FILE));
+                    }
                 }
-                Promise.all(npz_download)
+                Promise.all(img_download)
                 .then((image_data) => {
                     let mid = performance.now();
                     
-                    let img_w = cdb.data[0].CISImageWidth;
-                    let img_h = cdb.data[0].CISImageHeight
+                    let bounding_boxes = new Float32Array(cdb.layers.length * 4);
                     for (i = 0; i < images.length; i++) {
+                        let ext = images[i].FILE.substr(images[i].FILE.lastIndexOf('.') + 1).toLowerCase();
+                        let pixels = image_data[i]
+                        if (ext === 'npz') {
+                            pixels = image_data[i][images[i].CISChannelVar + '.npy'];
+                        }
+                    
+                        let layer = layer_ids[images[i].CISLayer];
                         if (images[i].CISChannel === 'CISColor') {
                             gl.bindTexture(gl.TEXTURE_2D_ARRAY, color_texture);
-                            let layer = layer_ids[images[i].CISLayer];
-                            gl.texSubImage3D(gl.TEXTURE_2D_ARRAY, 0, 0, 0, layer, img_w, img_h, 1, gl.RGBA, gl.UNSIGNED_BYTE, 
-                                             image_data[i][images[i].CISChannelVar + '.npy']);
+                            gl.texSubImage3D(gl.TEXTURE_2D_ARRAY, 0, images[i].CISLayerOffsetX, images[i].CISLayerOffsetY, layer, images[i].CISLayerWidth,
+                                             images[i].CISLayerHeight, 1, gl.RGBA, gl.UNSIGNED_BYTE, pixels);
                         }
                         else if (images[i].CISChannel === 'CISDepth') {
                             gl.bindTexture(gl.TEXTURE_2D_ARRAY, depth_texture);
-                            let layer = layer_ids[images[i].CISLayer];
-                            gl.texSubImage3D(gl.TEXTURE_2D_ARRAY, 0, 0, 0, layer, img_w, img_h, 1, gl.RED, gl.FLOAT, 
-                                             image_data[i][images[i].CISChannelVar + '.npy']);
+                            gl.texSubImage3D(gl.TEXTURE_2D_ARRAY, 0, images[i].CISLayerOffsetX, images[i].CISLayerOffsetY, layer, images[i].CISLayerWidth,
+                                             images[i].CISLayerHeight, 1, gl.RED, gl.FLOAT, pixels);
                         }
+                        
+                        bounding_boxes[4 * layer + 0] = images[i].CISLayerOffsetX;
+                        bounding_boxes[4 * layer + 1] = images[i].CISLayerOffsetY;
+                        bounding_boxes[4 * layer + 2] = images[i].CISLayerOffsetX + images[i].CISLayerWidth - 1;
+                        bounding_boxes[4 * layer + 3] = images[i].CISLayerOffsetY + images[i].CISLayerHeight - 1;
                     }
+                    console.log(bounding_boxes);
                     gl.bindTexture(gl.TEXTURE_2D_ARRAY, null);
+                    gl.uniform4fv(composite.uniforms['bbox[0]'], bounding_boxes);
                     updateLayers();
                     gl.finish();
                     
