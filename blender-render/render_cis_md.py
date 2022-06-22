@@ -386,6 +386,17 @@ def main():
             np.savez_compressed(f'{cis_img}/{cis_layer}_RGBA.npz', rgba=rgba.flatten())
             np.savez_compressed(f'{cis_img}/{cis_layer}_Depth.npz', depth=depth.flatten())
             
+            near = cam_data.clip_start
+            far = cam_data.clip_end
+            depth_u16 = depth.flatten();
+            depth_u16 = np.piecewise(depth_u16, [depth_u16 < far, depth_u16 > far], [lambda d: 1.0 - (((1.0/d) - (1.0/near)) / ((1.0/far) - (1.0/near))), lambda d: 0.0])
+            depth_u16 *= 65535.0
+            depth_buffer = np.asarray(depth_u16, dtype=np.uint16)
+            depth_rvl = compressRvl(depth_buffer)
+            rvl.write(f'RVL\n{depth.shape[1]} {depth.shape[0]}\n'.encode('utf-8'))
+            rvl = open(f'{cis_img}/{cis_layer}_Depth.rvl', 'wb')
+            rvl.write(depth_rvl.tobytes())
+            rvl.close()
             
             # near = cam_data.clip_start
             # far = cam_data.clip_end
@@ -559,7 +570,55 @@ def cropToContent(rgba, depth, max_depth):
                     max_y = y
     bounds = (min_x, min_y, max_x, max_y)
     return rgba[min_y:max_y+1,min_x:max_x+1,:], depth[min_y:max_y+1,min_x:max_x+1,:], bounds
-    
+
+
+def encodeVle(value, out_data):
+    while True:
+        nibble = value & 0x7 # lower 3 bits
+        value = value >> 3
+        if value != 0:
+            nibble = nibble | 0x8 # more to come
+        out_data['word'] = (out_data['word'] << 4) | nibble
+        out_data['nibbles_written'] += 1
+        if out_data['nibbles_written'] == 8: # output word
+            out_data['p_buffer'][out_data['p_idx']] = out_data['word']
+            out_data['p_idx'] += 1
+            out_data['nibbles_written'] = 0
+            out_data['word'] = 0
+        if value == 0:
+            break
+
+
+def compressRvl(depth_buffer):
+    buffer = np.empty(depth_buffer.size, dtype=np.uint32)
+    data = {'p_buffer': buffer, 'p_idx': 0, 'nibbles_written': 0, 'word': 0}
+    previous = 0
+    i = 0
+    while i < depth_buffer.size:
+        zeros = 0
+        nonzeros = 0
+        while i < depth_buffer.size and depth_buffer[i] == 0:
+            i += 1
+            zeros += 1
+        encodeVle(zeros, data) # number of zeros
+        tmp = i
+        while tmp < depth_buffer.size and depth_buffer[tmp] != 0:
+            tmp += 1
+            nonzeros += 1
+        encodeVle(nonzeros, data) # number of nonzeros
+        for j in range(nonzeros):
+            current = depth_buffer[i + j]
+            delta = current - previous
+            positive = ((delta << 1) & 0xffffffff) ^ (delta >> 31);
+            encodeVle(positive, data) # nonzero value
+            previous = current
+        i += nonzeros
+    if data['nibbles_written'] != 0:
+        data['p_buffer'][data['p_idx']] = data['word'] << 4 * (8 - data['nibbles_written'])
+        data['p_idx'] += 1
+    data['p_buffer'] = data['p_buffer'][:data['p_idx']]
+    return data['p_buffer'].view(dtype=np.uint8)
+
 
 def mkdir(path):
     exists = os.path.exists(path)
