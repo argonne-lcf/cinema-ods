@@ -1,7 +1,10 @@
 #include <iostream>
+#include <chrono>
+
+typedef std::chrono::high_resolution_clock::time_point ChronoTime;
 
 
-void readRvl(const char *filename, uint16_t*& buffer, int *width, int *height);
+void readRvl(const char *filename, uint16_t*& buffer, int *width, int *height, double *near, double *far);
 int32_t readFile(const char* filename, char** data_ptr);
 int decodeVle(int*& pBuffer, int& word, int& nibblesWritten);
 void decompressRvl(char *input, short *output, int numPixels);
@@ -11,21 +14,34 @@ void writePgm(const char *filename, uint16_t *values, int width, int height);
 int main(int argc, char **argv)
 {
     int width, height;
+    double near, far;
     uint16_t *depth_buffer;
+
+    // Read RVL file
+    readRvl("MdSuperlubricity.cdb/ts510_center_atoms/molecule_04_Depth.rvl", depth_buffer, &width, &height, &near, &far);
+
+    std::cout << "Read RVL file: " << width << "x" << height << " 16-bit depth (" << near << "-" << far << ")" << std::endl;
     
-    std::cout << "about to read" << std::endl;
-    readRvl("ts510_center_atomsbonds/molecule_02_Depth.rvl", depth_buffer, &width, &height);
+    // Convert back to linear space
+    for (int i = 0; i < width * height; i++)
+    {
+        double depth = 1.0 - ((double)depth_buffer[i] / 65535.0);
+        double ndc = (depth * 2.0) - 1.0;
+        double o_depth = (2.0 * near * far) / (far + near - ndc * (far - near));
+        double n_depth = (o_depth - near) / (far - near);
+        //std::cout << depth << ", " << ndc << ", " << o_depth << ", " << n_depth << std::endl;
+        depth_buffer[i] = (uint16_t)(n_depth * 65535.0);
+    }
     
-    std::cout << "finished reading... about to write pgm" << std::endl;
-    
-    writePgm("test_depth_m02.pgm", depth_buffer, width, height);
-    
-    std::cout << "finished writing pgm" << std::endl;
+    // Write PGM grayscale image file
+    writePgm("test_depth_m04.pgm", depth_buffer, width, height);
+
+    std::cout << "Finished!" << std::endl;
     
     return 0;
 }
 
-void readRvl(const char *filename, uint16_t*& buffer, int *width, int *height)
+void readRvl(const char *filename, uint16_t*& buffer, int *width, int *height, double *near, double *far)
 {
     char *rvl;
     int32_t rvl_length = readFile(filename, &rvl);
@@ -35,10 +51,13 @@ void readRvl(const char *filename, uint16_t*& buffer, int *width, int *height)
         exit(1);
     }
     
+    // start decode timer
+    ChronoTime t1 = std::chrono::high_resolution_clock::now();
+    
     int i = 0;
     int j = 4;
-    char width_str[10], height_str[10];
-    bool first = true
+    char width_str[10], height_str[10], near_str[24], far_str[24];
+    bool first = true;
     while (rvl[j] != '\n')
     {
         if (first)
@@ -46,6 +65,7 @@ void readRvl(const char *filename, uint16_t*& buffer, int *width, int *height)
             if (rvl[j] == ' ')
             {
                 width_str[i] = '\0';
+                i = -1;
                 first = false;
             }
             else {
@@ -61,18 +81,48 @@ void readRvl(const char *filename, uint16_t*& buffer, int *width, int *height)
     }
     height_str[i] = '\0';
     
+    i = 0;
+    j++;
+    first = true;
+    while (rvl[j] != '\n')
+    {
+        if (first)
+        {
+            if (rvl[j] == ' ')
+            {
+                near_str[i] = '\0';
+                i = -1;
+                first = false;
+            }
+            else {
+                near_str[i] = rvl[j];
+            }
+        }
+        else
+        {
+            far_str[i] = rvl[j];
+        }
+        i++;
+        j++;
+    }
+    
     *width = atoi(width_str);
     *height = atoi(height_str);
+    *near = atof(near_str);
+    *far = atof(far_str);
     int num_pixels = (*width) * (*height);
     
     short *depth = (short*)malloc(num_pixels * sizeof(short));
-    std::cout << "read in file... about to decompress" << std::endl;
-    decompressRvl(rvl + (i+5), depth, num_pixels);
+    decompressRvl(rvl + (j+1), depth, num_pixels);
     
     free(rvl);
     
-    std::cout << "finished decompressing" << std::endl;
     buffer = (uint16_t*)depth;
+    
+    // stop decode timer
+    ChronoTime t2 = std::chrono::high_resolution_clock::now();
+    uint64_t duration = std::chrono::duration_cast<std::chrono::microseconds>(t2 - t1).count();
+    std::cout << "RVL decompress (" << (*width) << "x" << (*height) << "): " << ((double)duration / 1000.0) << " ms" << std::endl;
 }
 
 int32_t readFile(const char* filename, char** data_ptr)
@@ -140,7 +190,6 @@ void decompressRvl(char *input, short *output, int numPixels)
     while (numPixelsToDecode)
     {
         int zeros = decodeVle(pBuffer, word, nibblesWritten); // number of zeros
-        std::cout << zeros << " zeros, ";
         numPixelsToDecode -= zeros;
         for (; zeros; zeros--)
         {
@@ -148,7 +197,6 @@ void decompressRvl(char *input, short *output, int numPixels)
         }
         int nonzeros = decodeVle(pBuffer, word, nibblesWritten); // number of nonzeros
         numPixelsToDecode -= nonzeros;
-        std::cout << nonzeros << " non-zeros (" << numPixelsToDecode << " pixels remaining)" << std::endl;
         for (; nonzeros; nonzeros--)
         {
             int positive = decodeVle(pBuffer, word, nibblesWritten); // nonzero value

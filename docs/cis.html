@@ -7,9 +7,9 @@
     <meta name='apple-mobile-web-app-capable' content='yes'>
     <title>Omnidirectional Stereo Image Viewer</title>
     <link rel="stylesheet" href="css/style.css"/>
-    <script type="application/javascript" src="js/zip.min.js"></script>
+    <!--<script type="application/javascript" src="js/zip.min.js"></script>-->
     <script type="application/javascript" src="js/jszip.min.js"></script>
-    <script type="application/javascript" src="js/UZIP.js"></script>
+    <!--<script type="application/javascript" src="js/UZIP.js"></script>-->
     <script type="application/javascript" src="js/gl-matrix-min.js"></script>
     <script type="application/javascript" src="js/glsl.js"></script>
     <script type="application/javascript" src="js/cdbreader.js"></script>
@@ -31,7 +31,7 @@
                 alert('Unable to initialize WebGL 2. Your browser may not support it.');
             }
             
-            cdb = new CdbReader('/blender-render/MdSuperlubricityCIS2.cdb');
+            cdb = new CdbReader('/blender-render/MdSuperlubricityRVL.cdb');
             let cdb_promise = cdb.read();
             let composite_vs = getFile('shaders/composite.vert');
             let composite_fs = getFile('shaders/composite.frag');
@@ -422,6 +422,58 @@
             });
         }
         
+        function getRvlData(url) {
+            let start = performance.now();
+            
+            return new Promise((resolve, reject) => {
+                getBinaryFile(url)
+                .then((rvl_data) => {
+                    let download = performance.now();
+                    console.log('RVL download: ' + (download - start).toFixed(1) + 'ms');
+                    rvl = new Uint8Array(rvl_data);
+                    
+                    // TODO: decompress RVL (port C code)
+                    if (rvl[0] !== 82 || rvl[1] !== 86 || rvl[2] !== 76 || rvl[3] !== 10) { // "RVL\n"
+                        console.log(rvl[0], rvl[1], rvl[2], rvl[3]);
+                        reject('File not RVL format');
+                    }
+                    else {
+                        let i = 4;
+                        let resolution = '';
+                        let z_clip = '';
+                        while (rvl[i] !== 10) {
+                            resolution += String.fromCharCode(rvl[i]);
+                            i++;
+                        }
+                        i++;
+                        while (rvl[i] !== 10) {
+                            z_clip += String.fromCharCode(rvl[i]);
+                            i++;
+                        }
+                        resolution = resolution.split(' ')
+                        z_clip = z_clip.split(' ');
+                        let d_width = parseInt(resolution[0], 10);
+                        let d_height = parseInt(resolution[1], 10);
+                        let z_near = parseFloat(z_clip[0]);
+                        let z_far = parseFloat(z_clip[1]);
+                        console.log(d_width, d_height);
+                        console.log(z_near, z_far);
+                    }
+                })
+                .catch((error) => {
+                    reject(error);
+                });
+            });
+        }
+        
+        function decompressRvl(input, num_pixels) {
+            
+        }
+        
+        function decodeVle(p_buffer, word, nibbles_written) {
+        
+        }
+        
         function updateTextures(image_id) {
             return new Promise((resolve, reject) => {
                 let start = performance.now();
@@ -444,6 +496,9 @@
                     }
                     else if (ext === 'png' || ext === 'jpg' || ext === 'jpeg' || ext === 'webp') {
                         img_download.push(getImageData(cdb.url + '/' + images[i].FILE));
+                    }
+                    else if (ext === 'rvl') {
+                        img_download.push(getRvlData(cdb.url + '/' + images[i].FILE));
                     }
                 }
                 Promise.all(img_download)

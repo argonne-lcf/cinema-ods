@@ -102,7 +102,7 @@ def main():
     cam_data = bpy.data.cameras.new('Camera')
     cam_data.type = 'PANO'
     cam_data.clip_start = 0.305 # 1 ft.
-    cam_data.clip_end = 200.0
+    cam_data.clip_end = 50.0
     cam_data.cycles.panorama_type = 'EQUIRECTANGULAR'
     cam_data.stereo.convergence_mode = 'OFFAXIS'
     cam_data.stereo.interocular_distance = 0.065
@@ -276,7 +276,8 @@ def main():
                 bonds_list.append(bonds)
             else:
                 bonds_list.append(None)
-
+        else:
+            bonds_list.append(None)
     # timer checkpoint - finished data loading/processing, about to start rendering
     mid_time = time.time()
 
@@ -393,8 +394,10 @@ def main():
             depth_u16 *= 65535.0
             depth_buffer = np.asarray(depth_u16, dtype=np.uint16)
             depth_rvl = compressRvl(depth_buffer)
-            rvl.write(f'RVL\n{depth.shape[1]} {depth.shape[0]}\n'.encode('utf-8'))
             rvl = open(f'{cis_img}/{cis_layer}_Depth.rvl', 'wb')
+            rvl.write('RVL\n'.encode('utf-8'))
+            rvl.write(f'{depth.shape[1]} {depth.shape[0]}\n'.encode('utf-8'))
+            rvl.write(f'{bpy.context.scene.camera.data.clip_start:.6f} {bpy.context.scene.camera.data.clip_end:.6f}\n'.encode('utf-8'))
             rvl.write(depth_rvl.tobytes())
             rvl.close()
             
