@@ -18,7 +18,7 @@ int main(int argc, char **argv)
     uint16_t *depth_buffer;
 
     // Read RVL file
-    readRvl("MdSuperlubricity.cdb/ts510_center_atoms/molecule_04_Depth.rvl", depth_buffer, &width, &height, &near, &far);
+    readRvl("MdSuperlubricityRVL.cdb/ts510_center_atoms/molecule_01_Depth.rvl", depth_buffer, &width, &height, &near, &far);
 
     std::cout << "Read RVL file: " << width << "x" << height << " 16-bit depth (" << near << "-" << far << ")" << std::endl;
     
@@ -34,7 +34,7 @@ int main(int argc, char **argv)
     }
     
     // Write PGM grayscale image file
-    writePgm("test_depth_m04.pgm", depth_buffer, width, height);
+    writePgm("test_depth_m01.pgm", depth_buffer, width, height);
 
     std::cout << "Finished!" << std::endl;
     
@@ -54,66 +54,16 @@ void readRvl(const char *filename, uint16_t*& buffer, int *width, int *height, d
     // start decode timer
     ChronoTime t1 = std::chrono::high_resolution_clock::now();
     
-    int i = 0;
-    int j = 4;
-    char width_str[10], height_str[10], near_str[24], far_str[24];
-    bool first = true;
-    while (rvl[j] != '\n')
-    {
-        if (first)
-        {
-            if (rvl[j] == ' ')
-            {
-                width_str[i] = '\0';
-                i = -1;
-                first = false;
-            }
-            else {
-                width_str[i] = rvl[j];
-            }
-        }
-        else
-        {
-            height_str[i] = rvl[j];
-        }
-        i++;
-        j++;
-    }
-    height_str[i] = '\0';
+    *width = rvl[4] | (rvl[5] << 8) | (rvl[6] << 16) | (rvl[7] << 24);
+    *height = rvl[8] | (rvl[9] << 8) | (rvl[10] << 16) | (rvl[11] << 24);
+    float *rvl_zclip = (float*)(rvl + 12);
+    *near = rvl_zclip[0];
+    *far = rvl_zclip[1];
     
-    i = 0;
-    j++;
-    first = true;
-    while (rvl[j] != '\n')
-    {
-        if (first)
-        {
-            if (rvl[j] == ' ')
-            {
-                near_str[i] = '\0';
-                i = -1;
-                first = false;
-            }
-            else {
-                near_str[i] = rvl[j];
-            }
-        }
-        else
-        {
-            far_str[i] = rvl[j];
-        }
-        i++;
-        j++;
-    }
-    
-    *width = atoi(width_str);
-    *height = atoi(height_str);
-    *near = atof(near_str);
-    *far = atof(far_str);
     int num_pixels = (*width) * (*height);
     
     short *depth = (short*)malloc(num_pixels * sizeof(short));
-    decompressRvl(rvl + (j+1), depth, num_pixels);
+    decompressRvl(rvl + 20, depth, num_pixels);
     
     free(rvl);
     
@@ -181,30 +131,39 @@ void decompressRvl(char *input, short *output, int numPixels)
 {
     int *buffer, *pBuffer;
     buffer = pBuffer = (int*)input;
+    
+    std::cout << "pBuffer: " << pBuffer[0] << "," << pBuffer[1] << std::endl;
 
     int word = 0;
     int nibblesWritten = 0;
     short current, previous = 0;
 
     int numPixelsToDecode = numPixels;
+    int test = 0;
     while (numPixelsToDecode)
     {
         int zeros = decodeVle(pBuffer, word, nibblesWritten); // number of zeros
+        std::cout << "zeros: " << zeros << std::endl;
         numPixelsToDecode -= zeros;
         for (; zeros; zeros--)
         {
             *output++ = 0;
         }
         int nonzeros = decodeVle(pBuffer, word, nibblesWritten); // number of nonzeros
+        std::cout << "nonzeros: " << nonzeros << std::endl;
         numPixelsToDecode -= nonzeros;
         for (; nonzeros; nonzeros--)
         {
             int positive = decodeVle(pBuffer, word, nibblesWritten); // nonzero value
+            std::cout << "  pos: " << positive << std::endl;
             int delta = (positive >> 1) ^ -(positive & 1);
             current = previous + delta;
             *output++ = current;
             previous = current;
         }
+        
+        test++;
+        if (test >= 3) exit(1);
     }
 }
 

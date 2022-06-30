@@ -438,26 +438,14 @@
                         reject('File not RVL format');
                     }
                     else {
-                        let i = 4;
-                        let resolution = '';
-                        let z_clip = '';
-                        while (rvl[i] !== 10) {
-                            resolution += String.fromCharCode(rvl[i]);
-                            i++;
-                        }
-                        i++;
-                        while (rvl[i] !== 10) {
-                            z_clip += String.fromCharCode(rvl[i]);
-                            i++;
-                        }
-                        resolution = resolution.split(' ')
-                        z_clip = z_clip.split(' ');
-                        let d_width = parseInt(resolution[0], 10);
-                        let d_height = parseInt(resolution[1], 10);
-                        let z_near = parseFloat(z_clip[0]);
-                        let z_far = parseFloat(z_clip[1]);
-                        console.log(d_width, d_height);
-                        console.log(z_near, z_far);
+                        let d_width = rvl[4] | (rvl[5] << 8) | (rvl[6] << 16) | (rvl[7] << 24);
+                        let d_height = rvl[8] | (rvl[9] << 8) | (rvl[10] << 16) | (rvl[11] << 24);
+                        let rvl_zclip = new Float32Array(rvl_data, 12, 2);
+                        let z_near = rvl_zclip[0];
+                        let z_far = rvl_zclip[1];
+                        let rvl_img = new Int32Array(rvl_data, 20);
+                        let depth = decompressRvl(rvl_img, d_width * d_height, z_near, z_far);
+                        resolve(depth);
                     }
                 })
                 .catch((error) => {
@@ -466,12 +454,59 @@
             });
         }
         
-        function decompressRvl(input, num_pixels) {
+        function decompressRvl(p_buffer, num_pixels, near, far) {
+            //let output = new Int16Array(num_pixels);
+            let output = new Float32Array(num_pixels);
+            let o_idx = 0;
+            let decompress_data = {p_idx: 0, word: 0, nibbles_written: 0};
+            let current = new Int16Array([0, 0]);
+            let depth_u16 = new Uint16Array(current.buffer);
+
+            let num_pixels_to_decode = num_pixels;
+            while (num_pixels_to_decode > 0) {
+                let zeros = decodeVle(p_buffer, decompress_data); // number of zeros
+                num_pixels_to_decode -= zeros;
+                while (zeros > 0) {
+                    //output[o_idx] = 0;
+                    output[o_idx] = far;
+                    o_idx++;
+                    zeros--;
+                }
+                let nonzeros = decodeVle(p_buffer, decompress_data); // number of nonzeros
+                num_pixels_to_decode -= nonzeros;
+                while (nonzeros > 0) {
+                    let positive = decodeVle(p_buffer, decompress_data); // nonzero value
+                    let delta = (positive >> 1) ^ -(positive & 1);
+                    current[0] = current[1] + delta;
+                    //output[o_idx] = current[0];
+                    let d = 1.0 - (depth_u16[0] / 65535.0);
+                    output[o_idx] = (2.0 * near * far) / (far + near - ((d * 2.0) - 1.0) * (far - near)); 
+                    o_idx++;
+                    current[1] = current[0];
+                    nonzeros--;
+                }
+            }
             
+            return output;
         }
         
-        function decodeVle(p_buffer, word, nibbles_written) {
-        
+        function decodeVle(p_buffer, data) {
+            let nibble;
+            let value = 0;
+            let bits = 29;
+            do {
+                if (data.nibbles_written === 0) {
+                    data.word = p_buffer[data.p_idx]; // load word
+                    data.p_idx++;
+                    data.nibbles_written = 8;
+                }
+                nibble = (data.word & 0xf0000000) >>> 0;
+                value = value | ((nibble << 1) >>> bits);
+                data.word = data.word << 4;
+                data.nibbles_written--;
+                bits -= 3;
+            } while (((nibble & 0x80000000) >>> 0) !== 0);
+            return value;
         }
         
         function updateTextures(image_id) {
@@ -520,6 +555,7 @@
                                              images[i].CISLayerHeight, 1, gl.RGBA, gl.UNSIGNED_BYTE, pixels);
                         }
                         else if (images[i].CISChannel === 'CISDepth') {
+                            console.log(i, pixels[0], pixels[4917120]);
                             gl.bindTexture(gl.TEXTURE_2D_ARRAY, depth_texture);
                             gl.texSubImage3D(gl.TEXTURE_2D_ARRAY, 0, images[i].CISLayerOffsetX, images[i].CISLayerOffsetY, layer, images[i].CISLayerWidth,
                                              images[i].CISLayerHeight, 1, gl.RED, gl.FLOAT, pixels);
@@ -530,7 +566,7 @@
                         bounding_boxes[4 * layer + 2] = images[i].CISLayerOffsetX + images[i].CISLayerWidth - 1;
                         bounding_boxes[4 * layer + 3] = images[i].CISLayerOffsetY + images[i].CISLayerHeight - 1;
                     }
-                    console.log(bounding_boxes);
+                    //console.log(bounding_boxes);
                     gl.bindTexture(gl.TEXTURE_2D_ARRAY, null);
                     gl.uniform4fv(composite.uniforms['bbox[0]'], bounding_boxes);
                     updateLayers();

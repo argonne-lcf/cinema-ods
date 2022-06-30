@@ -5,6 +5,7 @@ import math
 import mathutils
 import os
 import re
+import struct
 import sys
 import time
 
@@ -396,8 +397,8 @@ def main():
             depth_rvl = compressRvl(depth_buffer)
             rvl = open(f'{cis_img}/{cis_layer}_Depth.rvl', 'wb')
             rvl.write('RVL\n'.encode('utf-8'))
-            rvl.write(f'{depth.shape[1]} {depth.shape[0]}\n'.encode('utf-8'))
-            rvl.write(f'{bpy.context.scene.camera.data.clip_start:.6f} {bpy.context.scene.camera.data.clip_end:.6f}\n'.encode('utf-8'))
+            rvl.write(struct.pack('<II', depth.shape[1], depth.shape[0]))
+            rvl.write(struct.pack('ff', bpy.context.scene.camera.data.clip_start, bpy.context.scene.camera.data.clip_end))
             rvl.write(depth_rvl.tobytes())
             rvl.close()
             
@@ -611,7 +612,7 @@ def compressRvl(depth_buffer):
         encodeVle(nonzeros, data) # number of nonzeros
         for j in range(nonzeros):
             current = depth_buffer[i + j]
-            delta = current - previous
+            delta = int(current - previous)
             positive = ((delta << 1) & 0xffffffff) ^ (delta >> 31);
             encodeVle(positive, data) # nonzero value
             previous = current
